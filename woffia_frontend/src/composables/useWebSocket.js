@@ -156,8 +156,8 @@ export function useWebSocket() {
         websocketService.on('alert', handleAlert);
         websocketService.on('deviceStatus', handleDeviceStatus);
 
-        // Auto-connect if enabled
-        if (autoConnect) {
+        // Auto-connect if enabled and not already connected
+        if (autoConnect && !websocketService.isConnected()) {
             await connect();
         }
 

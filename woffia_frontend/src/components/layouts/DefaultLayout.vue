@@ -3,7 +3,7 @@
         <!-- Sidebar -->
         <aside :class="['sidebar', { 'sidebar--collapsed': sidebarCollapsed }]">
             <div class="sidebar__header">
-                <div class="sidebar__logo" >
+                <div class="sidebar__logo">
                     <Leaf :size="32" class="logo-icon" />
                     <span v-if="!sidebarCollapsed" class="logo-text">Wolffia</span>
                 </div>
@@ -225,22 +225,32 @@ export default {
             router.push('/login');
         };
 
-        // Load sidebar state
         onMounted(async () => {
             const saved = localStorage.getItem('sidebarCollapsed');
             if (saved) {
                 sidebarCollapsed.value = saved === 'true';
             }
 
-            // Setup WebSocket
-            await ws.setup({
-                autoConnect: true,
-                subscribeToDevices: true,
-                requestNotifications: true
-            });
+            // Try to setup WebSocket if token exists, but don't fail if it doesn't
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                try {
+                    await ws.setup({
+                        autoConnect: true,
+                        subscribeToDevices: true,
+                        requestNotifications: true
+                    });
+                } catch (error) {
+                    console.warn('WebSocket setup failed:', error);
+                }
+            }
 
-            // Fetch alerts
-            await alertsStore.fetchUnresolvedAlerts();
+            // Try to fetch alerts, but don't fail if not authenticated
+            try {
+                await alertsStore.fetchUnresolvedAlerts();
+            } catch (error) {
+                console.warn('Failed to fetch alerts:', error);
+            }
 
             // Load user data
             const storedUser = localStorage.getItem('user_name');

@@ -54,12 +54,23 @@ export default {
                 alert('Passwords do not match');
                 return;
             }
+
+            if (form.value.password.length < 6) {
+                alert('Password must be at least 6 characters');
+                return;
+            }
+
             loading.value = true;
             try {
-                // await apiService.register(form.value);
-                router.push('/login'); // Redirect to login after successful registration
+                await apiService.register({
+                    email: form.value.email,
+                    password: form.value.password,
+                    user_name: form.value.email.split('@')[0] // Use email prefix as default name
+                });
+                alert('Registration successful! Please login.');
+                router.push('/login');
             } catch (error) {
-                console.error('Registration failed:', error);
+                alert(error.response?.data?.message || 'Registration failed. Please try again.');
             } finally {
                 loading.value = false;
             }

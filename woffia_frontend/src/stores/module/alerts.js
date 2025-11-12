@@ -53,10 +53,22 @@ export const useAlertsStore = defineStore('alerts', () => {
         error.value = null;
 
         try {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                // Don't make API call if not authenticated
+                alerts.value = [];
+                return [];
+            }
+
             const response = await apiService.getAlerts(params);
             alerts.value = response.data;
             return response.data;
         } catch (err) {
+            // Don't throw error if it's a 401 - just return empty array
+            if (err.response?.status === 401) {
+                alerts.value = [];
+                return [];
+            }
             error.value = err.message || 'Failed to fetch alerts';
             console.error('Error fetching alerts:', err);
             throw err;

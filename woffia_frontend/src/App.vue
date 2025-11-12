@@ -30,6 +30,10 @@ export default {
         // Determine layout based on route meta
         const layoutComponent = computed(() => {
             const layoutName = route.meta.layout || 'default';
+            // Explicitly check if we're on auth routes
+            if (route.name === 'Login' || route.name === 'Register') {
+                return 'AuthLayout';
+            }
             return layoutName === 'auth' ? 'AuthLayout' : 'DefaultLayout';
         });
 

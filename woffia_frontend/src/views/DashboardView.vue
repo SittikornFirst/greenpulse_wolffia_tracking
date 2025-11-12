@@ -10,10 +10,10 @@
                     <RefreshCw :class="{ 'spin': loading }" :size="16" />
                     <span>Refresh</span>
                 </button>
-                <button @click="exportData" class="btn btn--primary">
+                <!-- <button @click="exportData" class="btn btn--primary">
                     <Download :size="16" />
                     <span>Export</span>
-                </button>
+                </button> -->
             </div>
         </div>
 
@@ -228,9 +228,21 @@ export default {
             devicesStore.updateLocalDevice(status.deviceId, { status: status.status });
         };
 
-        // Lifecycle
         onMounted(async () => {
             await refreshData();
+
+            // Only setup WebSocket listeners if not already connected
+            // The DefaultLayout should handle the connection
+            if (!websocketService.isConnected()) {
+                const token = localStorage.getItem('auth_token');
+                if (token) {
+                    try {
+                        await websocketService.connect(token);
+                    } catch (error) {
+                        console.error('Failed to connect to WebSocket:', error);
+                    }
+                }
+            }
 
             // Setup WebSocket listeners
             websocketService.on('sensorReading', handleSensorReading);
@@ -243,26 +255,20 @@ export default {
                 sensorDataStore.setRealtimeConnection(false);
             });
 
-            // Connect to WebSocket
-            const token = localStorage.getItem('auth_token');
-            try {
-                await websocketService.connect(token);
-            } catch (error) {
-                console.error('Failed to connect to WebSocket:', error);
+            // Subscribe to all devices only if connected
+            if (websocketService.isConnected()) {
+                devicesStore.devices.forEach(device => {
+                    websocketService.subscribeToDevice(device.id);
+                });
             }
-
-            // Subscribe to all devices
-            devicesStore.devices.forEach(device => {
-                websocketService.subscribeToDevice(device.id);
-            });
         });
 
         onUnmounted(() => {
             websocketService.off('sensorReading', handleSensorReading);
             websocketService.off('alert', handleAlert);
             websocketService.off('deviceStatus', handleDeviceStatus);
+            // Don't disconnect here - let DefaultLayout handle it
         });
-
         return {
             loading,
             realtimeConnected,

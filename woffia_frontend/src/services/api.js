@@ -10,13 +10,22 @@ const apiClient = axios.create({
     }
 });
 
-// Request interceptor for adding auth token
+// Store router reference (will be set from router/index.js)
+let routerInstance = null;
+
+// Export function to set router
+export const setRouter = (router) => {
+    routerInstance = router;
+};
+
+// Request interceptor for adding auth token (optional)
 apiClient.interceptors.request.use(
     (config) => {
         const token = localStorage.getItem('auth_token');
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
+        // Don't fail if no token - just continue without it
         return config;
     },
     (error) => {
@@ -32,9 +41,8 @@ apiClient.interceptors.response.use(
             // Server responded with error status
             switch (error.response.status) {
                 case 401:
-                    // Unauthorized - clear token and redirect to login
-                    localStorage.removeItem('auth_token');
-                    window.location.href = '/login';
+                    // Don't redirect - just log the error
+                    console.warn('Unauthorized request - continuing without auth');
                     break;
                 case 403:
                     console.error('Access forbidden');

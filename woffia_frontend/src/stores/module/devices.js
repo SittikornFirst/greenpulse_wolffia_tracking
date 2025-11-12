@@ -60,7 +60,24 @@ export const useDevicesStore = defineStore('devices', () => {
         error.value = null;
 
         try {
-            const response = await apiService.createDevice(deviceData);
+            // Map frontend fields to backend expected fields
+            const mappedData = {
+                device_name: deviceData.name || deviceData.device_name,
+                device_type: deviceData.type || deviceData.device_type || 'greenpulse-v1',
+                farm_id: deviceData.farm_id || deviceData.farmId, // Required - must be provided
+                location: {
+                    name: deviceData.location || '',
+                    address: deviceData.location || ''
+                },
+                status: deviceData.status || 'active'
+            };
+
+            // Add device_id if provided, otherwise let backend generate it
+            if (deviceData.device_id || deviceData.id) {
+                mappedData.device_id = deviceData.device_id || deviceData.id;
+            }
+
+            const response = await apiService.createDevice(mappedData);
             devices.value.push(response.data);
             return response.data;
         } catch (err) {

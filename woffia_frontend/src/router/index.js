@@ -128,11 +128,8 @@ const router = createRouter({
     }
 });
 
-// Navigation guard for authentication
+// Navigation guard - no authentication required
 router.beforeEach((to, from, next) => {
-    const token = localStorage.getItem('auth_token');
-    const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-
     // Set page title
     if (to.meta.title) {
         document.title = `${to.meta.title} | Wolffia Monitoring`;
@@ -140,22 +137,17 @@ router.beforeEach((to, from, next) => {
         document.title = 'Wolffia Monitoring System';
     }
 
-    // Check authentication
-    if (requiresAuth && !token) {
-        next({
-            name: 'Login',
-            query: { redirect: to.fullPath }
-        });
-    } else if (!requiresAuth && token && (to.name === 'Login' || to.name === 'Register')) {
-        next({ name: 'Dashboard' });
-    } else {
-        next();
-    }
+    // Allow all routes - no auth check
+    next();
 });
 
 // Navigation guard for error handling
 router.onError((error) => {
     console.error('Router error:', error);
 });
+
+// Set router instance in API service
+import { setRouter } from '@/services/api';
+setRouter(router);
 
 export default router;

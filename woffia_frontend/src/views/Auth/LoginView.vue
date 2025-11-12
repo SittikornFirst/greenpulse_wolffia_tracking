@@ -45,10 +45,14 @@ export default {
         const handleLogin = async () => {
             loading.value = true;
             try {
-                // await apiService.login(form.value);
-                router.push('/dashboard'); // Redirect to the dashboard after successful login
+                const response = await apiService.login(form.value);
+                if (response.data.token) {
+                    localStorage.setItem('auth_token', response.data.token);
+                    localStorage.setItem('user_name', response.data.user?.user_name || 'User');
+                    router.push('/dashboard');
+                }
             } catch (error) {
-                console.error('Login failed:', error);
+                alert(error.response?.data?.message || 'Login failed. Please check your credentials.');
             } finally {
                 loading.value = false;
             }
