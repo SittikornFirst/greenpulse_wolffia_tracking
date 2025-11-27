@@ -24,21 +24,14 @@
                 <Cpu :size="32" class="stat-icon" />
                 <div class="stat-content">
                     <p class="stat-value">{{ totalDevices }}</p>
-                    <p class="stat-label">Total Devices</p>
+                    <p class="stat-label">Connected Devices</p>
                 </div>
             </div>
             <div class="stat-card">
                 <Activity :size="32" class="stat-icon" />
                 <div class="stat-content">
-                    <p class="stat-value">{{ activeFarms }}</p>
-                    <p class="stat-label">Active Farms</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <TrendingUp :size="32" class="stat-icon" />
-                <div class="stat-content">
-                    <p class="stat-value">{{ averageHealth }}%</p>
-                    <p class="stat-label">Avg Health</p>
+                    <p class="stat-value">{{ farmsWithDevices }}</p>
+                    <p class="stat-label">Farms with Device</p>
                 </div>
             </div>
         </div>
@@ -62,18 +55,16 @@
 
         <!-- Farms Grid -->
         <div v-else class="farms-grid">
-            <div v-for="farm in farms" :key="farm.id" class="farm-card" @click="goToFarmDetails(farm.id)">
+            <div v-for="farm in farms" :key="farm._id || farm.id" class="farm-card"
+                @click="goToFarmDetails(farm._id || farm.id)">
                 <div class="farm-header">
                     <div class="farm-icon">
                         <MapPin :size="24" />
                     </div>
-                    <div :class="['farm-status', `farm-status--${farm.status}`]">
-                        {{ farm.status }}
-                    </div>
                 </div>
 
                 <div class="farm-body">
-                    <h3 class="farm-name">{{ farm.name }}</h3>
+                    <h3 class="farm-name">{{ farm.farm_name || farm.name }}</h3>
                     <p class="farm-location">
                         <MapPin :size="16" />
                         <span>{{ farm.location }}</span>
@@ -84,32 +75,6 @@
                             <Cpu :size="18" />
                             <span>{{ farm.deviceCount }} devices</span>
                         </div>
-                        <div class="farm-stat">
-                            <Droplet :size="18" />
-                            <span>{{ farm.tankCount }} tanks</span>
-                        </div>
-                    </div>
-
-                    <!-- Health Indicators -->
-                    <div class="health-indicators">
-                        <div class="health-item">
-                            <span class="health-label">Water Quality</span>
-                            <div class="health-bar">
-                                <div class="health-fill"
-                                    :style="{ width: farm.waterQuality + '%', background: getHealthColor(farm.waterQuality) }">
-                                </div>
-                            </div>
-                            <span class="health-value">{{ farm.waterQuality }}%</span>
-                        </div>
-                        <div class="health-item">
-                            <span class="health-label">System Health</span>
-                            <div class="health-bar">
-                                <div class="health-fill"
-                                    :style="{ width: farm.systemHealth + '%', background: getHealthColor(farm.systemHealth) }">
-                                </div>
-                            </div>
-                            <span class="health-value">{{ farm.systemHealth }}%</span>
-                        </div>
                     </div>
                 </div>
 
@@ -118,7 +83,7 @@
                         <Settings :size="16" />
                         <span>Manage</span>
                     </button>
-                    <button @click.stop="goToFarmDetails(farm.id)" class="btn btn-primary btn-sm">
+                    <button @click.stop="goToFarmDetails(farm._id || farm.id)" class="btn btn-primary btn-sm">
                         <ArrowRight :size="16" />
                         <span>View Details</span>
                     </button>
@@ -149,24 +114,6 @@
                                 placeholder="e.g., Bangkok, Thailand" />
                         </div>
 
-                        <div class="form-group">
-                            <label for="farm-description">Description (Optional)</label>
-                            <textarea id="farm-description" v-model="farmForm.description" rows="3"
-                                placeholder="Describe this farm location..."></textarea>
-                        </div>
-
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="tank-count">Number of Tanks</label>
-                                <input id="tank-count" v-model.number="farmForm.tankCount" type="number" min="1"
-                                    required />
-                            </div>
-                            <div class="form-group">
-                                <label for="farm-area">Area (m²)</label>
-                                <input id="farm-area" v-model.number="farmForm.area" type="number" min="1" step="0.1" />
-                            </div>
-                        </div>
-
                         <div class="form-actions">
                             <button type="button" @click="closeModal" class="btn btn-secondary">
                                 Cancel
@@ -186,45 +133,39 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-    Plus, MapPin, Cpu, Activity, TrendingUp, Droplet, Settings,
+    Plus, MapPin, Cpu, Activity, Settings,
     ArrowRight, X
 } from 'lucide-vue-next';
 import apiService from '@/services/api';
-import { useDevicesStore } from '@/stores/module/devices';
+import { useFarmsStore } from '@/stores/module/farms';
 
 export default {
     name: 'FarmsView',
     components: {
-        Plus, MapPin, Cpu, Activity, TrendingUp, Droplet, Settings,
+        Plus, MapPin, Cpu, Activity, Settings,
         ArrowRight, X
     },
     setup() {
         const router = useRouter();
-        const devicesStore = useDevicesStore();
+        const farmsStore = useFarmsStore();
 
         const loading = ref(false);
         const saving = ref(false);
         const showAddModal = ref(false);
         const editingFarm = ref(null);
-        const farms = ref([]);
+        const farms = computed(() => farmsStore.farms);
 
         const farmForm = ref({
             name: '',
-            location: '',
-            description: '',
-            tankCount: 1,
-            area: 0
+            location: ''
         });
 
-        // Fetch farms from API
         const fetchFarms = async () => {
             loading.value = true;
             try {
-                const response = await apiService.getFarms();
-                farms.value = response.data || [];
+                await farmsStore.fetchFarms();
             } catch (error) {
                 console.error('Failed to fetch farms:', error);
-                farms.value = [];
             } finally {
                 loading.value = false;
             }
@@ -232,26 +173,12 @@ export default {
 
         // Calculate stats from farms
         const totalFarms = computed(() => farms.value.length);
-        const totalDevices = computed(() => {
-            return farms.value.reduce((sum, farm) => sum + (farm.deviceCount || 0), 0);
-        });
-        const activeFarms = computed(() => {
-            return farms.value.filter(f => f.status === 'active').length;
-        });
-        const averageHealth = computed(() => {
-            if (farms.value.length === 0) return 0;
-            const total = farms.value.reduce((sum, farm) => {
-                const health = (farm.waterQuality || 0 + farm.systemHealth || 0) / 2;
-                return sum + health;
-            }, 0);
-            return Math.round(total / farms.value.length);
-        });
-
-        const getHealthColor = (value) => {
-            if (value >= 90) return '#10b981';
-            if (value >= 75) return '#f59e0b';
-            return '#ef4444';
-        };
+        const totalDevices = computed(() =>
+            farms.value.reduce((sum, farm) => sum + (farm.deviceCount || 0), 0)
+        );
+        const farmsWithDevices = computed(() =>
+            farms.value.filter(farm => (farm.deviceCount || 0) > 0).length
+        );
 
         const goToFarmDetails = (farmId) => {
             router.push(`/farms/${farmId}`);
@@ -260,11 +187,8 @@ export default {
         const handleEditFarm = (farm) => {
             editingFarm.value = farm;
             farmForm.value = {
-                name: farm.name || '',
-                location: farm.location || '',
-                description: farm.description || '',
-                tankCount: farm.tankCount || 1,
-                area: farm.area || 0
+                name: farm.farm_name || farm.name || '',
+                location: farm.location || ''
             };
             showAddModal.value = true;
         };
@@ -273,33 +197,19 @@ export default {
             saving.value = true;
             try {
                 if (editingFarm.value) {
-                    // Update existing farm
                     const farmId = editingFarm.value._id || editingFarm.value.id;
                     await apiService.updateFarm(farmId, {
-                        name: farmForm.value.name,
-                        location: farmForm.value.location,
-                        description: farmForm.value.description,
-                        area: farmForm.value.area,
-                        tankCount: farmForm.value.tankCount
+                        farm_name: farmForm.value.name,
+                        location: farmForm.value.location
                     });
                 } else {
-                    // Create new farm - ensure correct data format
-                    const farmData = {
+                    await apiService.createFarm({
                         name: farmForm.value.name,
-                        location: farmForm.value.location,
-                        description: farmForm.value.description || '',
-                        area: farmForm.value.area || 0,
-                        tankCount: farmForm.value.tankCount || 0
-                    };
-
-                    console.log('Creating farm with data:', farmData); // Debug log
-
-                    const response = await apiService.createFarm(farmData);
-                    console.log('Farm created:', response.data); // Debug log
+                        location: farmForm.value.location
+                    });
                 }
 
                 await fetchFarms();
-                await devicesStore.fetchDevices();
                 closeModal();
             } catch (error) {
                 console.error('Farm save error:', error);
@@ -314,16 +224,12 @@ export default {
             editingFarm.value = null;
             farmForm.value = {
                 name: '',
-                location: '',
-                description: '',
-                tankCount: 1,
-                area: 0
+                location: ''
             };
         };
 
         onMounted(async () => {
             await fetchFarms();
-            await devicesStore.fetchDevices();
         });
 
         return {
@@ -335,9 +241,7 @@ export default {
             farmForm,
             totalFarms,
             totalDevices,
-            activeFarms,
-            averageHealth,
-            getHealthColor,
+            farmsWithDevices,
             goToFarmDetails,
             handleEditFarm,
             handleSaveFarm,

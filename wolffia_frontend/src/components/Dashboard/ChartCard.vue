@@ -131,7 +131,12 @@ export default {
                 return { min: 0, max: 0, avg: 0, count: 0 };
             }
 
-            const values = props.data.map(d => d.value);
+            const values = props.data.map(d => d.y || d.value).filter(v => v !== null && v !== undefined && !isNaN(v));
+            
+            if (values.length === 0) {
+                return { min: 0, max: 0, avg: 0, count: 0 };
+            }
+
             const sum = values.reduce((acc, val) => acc + val, 0);
 
             return {
@@ -145,8 +150,8 @@ export default {
         const currentStatus = computed(() => {
             if (!hasData.value || !props.optimalRange) return 'unknown';
 
-            const latestValue = props.data[props.data.length - 1]?.value;
-            if (!latestValue) return 'unknown';
+            const latestValue = props.data[props.data.length - 1]?.y || props.data[props.data.length - 1]?.value;
+            if (!latestValue || isNaN(latestValue)) return 'unknown';
 
             if (latestValue < props.optimalRange.min || latestValue > props.optimalRange.max) {
                 return 'critical';
@@ -196,14 +201,14 @@ export default {
 
             // Prepare data
             const labels = props.data.map(d => {
-                const date = new Date(d.timestamp);
+                const date = new Date(d.x || d.timestamp);
                 return date.toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit'
                 });
             });
 
-            const values = props.data.map(d => d.value);
+            const values = props.data.map(d => d.y || d.value);
 
             // Chart configuration
             const config = {

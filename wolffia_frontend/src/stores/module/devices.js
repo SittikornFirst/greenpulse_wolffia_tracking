@@ -3,8 +3,38 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiService from '@/services/api';
 
+const normalizeDevice = (device) => ({
+    id: device._id || device.id || device.device_id,
+    device_id: device.device_id,
+    device_name: device.device_name,
+    name: device.device_name,
+    device_type: device.device_type || 'environmental',
+    farmId: device.farm_id?._id || device.farm_id || null,
+    farmName: device.farm_id?.farm_name || device.farm_name || '',
+    location: typeof device.location === 'string' ? device.location : device.location?.name || device.location || '',
+    status: device.status || 'inactive',
+    lastActivity: device.last_activity,
+    createdAt: device.created_at,
+    configuration: device.config_id ? {
+        id: device.config_id._id || device.config_id.id,
+        mqtt_topic: device.config_id.mqtt_topic,
+        alert_enabled: device.config_id.alert_enabled,
+        sampling_interval: device.config_id.sampling_interval,
+        ph_min: device.config_id.ph_min,
+        ph_max: device.config_id.ph_max,
+        ec_value_min: device.config_id.ec_value_min,
+        ec_value_max: device.config_id.ec_value_max,
+        light_intensity_min: device.config_id.light_intensity_min,
+        light_intensity_max: device.config_id.light_intensity_max,
+        air_temp_min: device.config_id.air_temp_min,
+        air_temp_max: device.config_id.air_temp_max,
+        water_temp_min: device.config_id.water_temp_min,
+        water_temp_max: device.config_id.water_temp_max,
+        alert_enabled_label: device.config_id.alert_enabled ? 'Enabled' : 'Disabled'
+    } : null
+});
+
 export const useDevicesStore = defineStore('devices', () => {
-    // State
     const devices = ref([]);
     const loading = ref(false);
     const error = ref(null);
@@ -44,8 +74,8 @@ export const useDevicesStore = defineStore('devices', () => {
 
         try {
             const response = await apiService.getDevices(farmId);
-            devices.value = response.data;
-            return response.data;
+            devices.value = (response.data || []).map(normalizeDevice);
+            return devices.value;
         } catch (err) {
             error.value = err.message || 'Failed to fetch devices';
             console.error('Error fetching devices:', err);
@@ -78,8 +108,9 @@ export const useDevicesStore = defineStore('devices', () => {
             }
 
             const response = await apiService.createDevice(mappedData);
-            devices.value.push(response.data);
-            return response.data;
+            const normalized = normalizeDevice(response.data);
+            devices.value.push(normalized);
+            return normalized;
         } catch (err) {
             error.value = err.message || 'Failed to add device';
             console.error('Error adding device:', err);
@@ -95,11 +126,17 @@ export const useDevicesStore = defineStore('devices', () => {
 
         try {
             const response = await apiService.updateDevice(deviceId, updates);
-            const index = devices.value.findIndex(d => d.id === deviceId);
+            const normalized = normalizeDevice(response.data);
+            const index = devices.value.findIndex(d => 
+                d.id === normalized.id || 
+                d.device_id === normalized.device_id ||
+                d.device_id === deviceId ||
+                d.id === deviceId
+            );
             if (index !== -1) {
-                devices.value[index] = { ...devices.value[index], ...response.data };
+                devices.value[index] = normalized;
             }
-            return response.data;
+            return normalized;
         } catch (err) {
             error.value = err.message || 'Failed to update device';
             console.error('Error updating device:', err);
@@ -115,7 +152,9 @@ export const useDevicesStore = defineStore('devices', () => {
 
         try {
             await apiService.deleteDevice(deviceId);
-            devices.value = devices.value.filter(d => d.id !== deviceId);
+            devices.value = devices.value.filter(d =>
+                d.id !== deviceId && d.device_id !== deviceId
+            );
 
             // Clear selection if deleted device was selected
             if (selectedDeviceId.value === deviceId) {
@@ -149,7 +188,7 @@ export const useDevicesStore = defineStore('devices', () => {
     }
 
     function updateLocalDevice(deviceId, updates) {
-        const index = devices.value.findIndex(d => d.id === deviceId);
+        const index = devices.value.findIndex(d => d.id === deviceId || d.device_id === deviceId);
         if (index !== -1) {
             devices.value[index] = { ...devices.value[index], ...updates };
         }

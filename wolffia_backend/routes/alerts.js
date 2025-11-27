@@ -9,17 +9,17 @@ router.use(authenticate);
 // Get all alerts
 router.get('/', async (req, res) => {
     try {
-        const { resolved, deviceId, priority } = req.query;
+        const { resolved, deviceId, severity } = req.query;
         const query = { user_id: req.user._id };
 
         if (resolved !== undefined) {
             query.status = resolved === 'true' ? 'resolved' : { $ne: 'resolved' };
         }
         if (deviceId) query.device_id = deviceId;
-        if (priority) query.priority = priority;
+        if (severity) query.severity = severity;
 
         const alerts = await Alert.find(query)
-            .sort({ createdAt: -1 })
+            .sort({ created_at: -1 })
             .limit(100);
 
         res.json(alerts);
@@ -34,7 +34,7 @@ router.get('/unresolved', async (req, res) => {
         const alerts = await Alert.find({
             user_id: req.user._id,
             status: { $ne: 'resolved' }
-        }).sort({ createdAt: -1 });
+        }).sort({ created_at: -1 });
 
         res.json(alerts);
     } catch (error) {
@@ -48,7 +48,7 @@ router.get('/device/:deviceId', async (req, res) => {
         const alerts = await Alert.find({
             device_id: req.params.deviceId,
             user_id: req.user._id
-        }).sort({ createdAt: -1 });
+        }).sort({ created_at: -1 });
 
         res.json(alerts);
     } catch (error) {
@@ -79,6 +79,7 @@ router.post('/', async (req, res) => {
     try {
         const alertData = {
             ...req.body,
+            severity: req.body.severity || req.body.priority || 'medium',
             user_id: req.user._id
         };
 

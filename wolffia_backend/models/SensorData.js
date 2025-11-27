@@ -6,58 +6,67 @@ const sensorDataSchema = new mongoose.Schema({
         required: true,
         ref: 'Device'
     },
-    timestamp: {
-        type: Date,
-        default: Date.now,
+    data_id: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    ph_value: {
+        type: Number,
         required: true
     },
-    ph: {
-        value: { type: Number, required: true },
-        status: { type: String, enum: ['normal', 'warning', 'critical'], default: 'normal' }
+    ec_value: {
+        type: Number,
+        required: true
     },
-    ec: {
-        value: { type: Number, required: true },
-        status: { type: String, enum: ['normal', 'warning', 'critical'], default: 'normal' }
+    tds_value: {
+        type: Number,
+        required: true
     },
-    temperature_water_c: {
-        value: { type: Number, required: true },
-        status: { type: String, enum: ['normal', 'warning', 'critical'], default: 'normal' }
+    water_temperature_c: {
+        type: Number,
+        required: true
     },
-    temperature_air_c: {
-        value: { type: Number, required: true },
-        status: { type: String, enum: ['normal', 'warning', 'critical'], default: 'normal' }
+    air_temperature_c: {
+        type: Number,
+        required: true
     },
     light_intensity: {
-        value: { type: Number, required: true },
-        status: { type: String, enum: ['normal', 'warning', 'critical'], default: 'normal' }
+        type: Number,
+        required: true
     },
     quality_flag: {
         type: String,
-        enum: ['good', 'acceptable', 'questionable', 'bad'],
-        default: 'good'
-    },
-    quality_score: {
-        type: Number,
-        min: 0,
-        max: 100,
-        default: 100
-    },
-    error_flags: {
-        sensor_error: Boolean,
-        communication_error: Boolean,
-        calibration_needed: Boolean
-    },
-    metadata: {
-        battery_level: Number,
-        signal_strength: Number,
-        firmware_version: String
+        enum: ['valid', 'suspect', 'error'],
+        default: 'valid'
     }
 }, {
-    timestamps: true
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
-sensorDataSchema.index({ device_id: 1, timestamp: -1 });
-sensorDataSchema.index({ device_id: 1, quality_flag: 1, timestamp: -1 });
-sensorDataSchema.index({ timestamp: 1 }, { expireAfterSeconds: 7776000 }); // 90 days TTL
+sensorDataSchema.index({ device_id: 1, created_at: -1 });
+
+const metricVirtuals = [
+    { virtual: 'ph', field: 'ph_value' },
+    { virtual: 'ec', field: 'ec_value' },
+    { virtual: 'tds', field: 'tds_value' },
+    { virtual: 'temperature_water_c', field: 'water_temperature_c' },
+    { virtual: 'temperature_air_c', field: 'air_temperature_c' }
+    // Note: light_intensity is already a real field, so no virtual needed
+];
+
+metricVirtuals.forEach(({ virtual, field }) => {
+    sensorDataSchema.virtual(virtual).get(function () {
+        const value = this[field];
+        if (value === undefined) return undefined;
+        return { value, status: 'normal' };
+    });
+});
+
+sensorDataSchema.virtual('timestamp').get(function () {
+    return this.created_at;
+});
 
 export default mongoose.model('SensorData', sensorDataSchema);

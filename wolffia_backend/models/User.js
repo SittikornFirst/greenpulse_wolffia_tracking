@@ -14,23 +14,18 @@ const userSchema = new mongoose.Schema({
         lowercase: true,
         trim: true
     },
-    password_hash: {
+    password: {
         type: String,
         required: true
     },
     role: {
         type: String,
-        enum: ['admin', 'farmer', 'viewer'],
+        enum: ['admin', 'farmer'],
         default: 'farmer'
     },
     phone: {
         type: String,
         trim: true
-    },
-    notification_preferences: {
-        email: { type: Boolean, default: true },
-        sms: { type: Boolean, default: false },
-        push: { type: Boolean, default: true }
     },
     is_active: {
         type: Boolean,
@@ -40,11 +35,11 @@ const userSchema = new mongoose.Schema({
         type: Date
     }
 }, {
-    timestamps: true
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
 });
 
-userSchema.methods.comparePassword = async function (password) {
-    return bcrypt.compare(password, this.password_hash);
+userSchema.methods.comparePassword = async function (candidatePassword) {
+    return bcrypt.compare(candidatePassword, this.password);
 };
 
 export default mongoose.model('User', userSchema);

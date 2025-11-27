@@ -16,11 +16,11 @@ router.post('/register', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Email already exists' });
         }
 
-        const password_hash = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 10);
         const user = new User({
             user_name,
             email,
-            password_hash,
+            password: hashedPassword,
             role: role || 'farmer',
             phone
         });

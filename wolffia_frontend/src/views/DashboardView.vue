@@ -1,78 +1,106 @@
 <template>
     <div class="dashboard">
-        <div class="dashboard__header">
-            <div class="dashboard__title">
-                <h1>Real-Time Monitoring</h1>
-                <p class="dashboard__subtitle">Monitor your Wolffia farm water quality in real-time</p>
-            </div>
-            <div class="dashboard__actions">
-                <button @click="refreshData" :disabled="loading" class="btn btn--secondary">
-                    <RefreshCw :class="{ 'spin': loading }" :size="16" />
-                    <span>Refresh</span>
-                </button>
-                <!-- <button @click="exportData" class="btn btn--primary">
-                    <Download :size="16" />
-                    <span>Export</span>
-                </button> -->
-            </div>
+        <div v-if="!hasFarms" class="dashboard-empty">
+            <MapPin :size="56" />
+            <h2>No farms found</h2>
+            <p>Create your first farm to start monitoring sensor data.</p>
+            <router-link to="/farms" class="btn btn--primary">
+                <span>Create a Farm</span>
+            </router-link>
         </div>
 
-        <!-- Connection Status Banner -->
-        <div v-if="!realtimeConnected" class="alert alert--warning">
-            <AlertCircle :size="20" />
-            <span>Real-time connection lost. Attempting to reconnect...</span>
-        </div>
-
-        <!-- Metrics Cards -->
-        <div class="metrics-grid">
-            <MetricCard v-for="metric in metrics" :key="metric.id" :title="metric.title" :value="metric.value"
-                :unit="metric.unit" :icon="metric.icon" :status="metric.status" :trend="metric.trend"
-                :range-min="metric.rangeMin" :range-max="metric.rangeMax" :last-update="metric.lastUpdate"
-                :loading="loading" />
-        </div>
-
-        <!-- Charts Section -->
-        <div class="charts-grid">
-            <ChartCard title="pH Level (24 Hours)" :data="phData" chart-type="area" color="#3b82f6"
-                :optimal-range="{ min: 6.5, max: 7.5 }" :loading="loading" />
-
-            <ChartCard title="Temperature (24 Hours)" :data="temperatureData" chart-type="line" color="#ef4444"
-                :optimal-range="{ min: 20, max: 28 }" :loading="loading" />
-        </div>
-
-        <div class="charts-grid">
-            <ChartCard title="Light Intensity (24 Hours)" :data="lightData" chart-type="area" color="#f59e0b"
-                :optimal-range="{ min: 3500, max: 5000 }" :loading="loading" />
-
-            <ChartCard title="Dissolved Oxygen (24 Hours)" :data="oxygenData" chart-type="line" color="#10b981"
-                :optimal-range="{ min: 6.0, max: 9.0 }" :loading="loading" />
-        </div>
-
-        <!-- Recent Alerts -->
-        <div class="recent-alerts">
-            <div class="section-header">
-                <h2>Recent Alerts</h2>
-                <router-link to="/alerts" class="link">View All</router-link>
+        <template v-else>
+            <div class="dashboard__header">
+                <div class="dashboard__title">
+                    <h1>Real-Time Monitoring</h1>
+                    <p class="dashboard__subtitle">Monitor your Wolffia farm water quality in real-time</p>
+                </div>
+                <div class="dashboard__actions">
+                    <div class="farm-selector">
+                        <label for="dashboard-farm">Farm</label>
+                        <select id="dashboard-farm" v-model="selectedFarmId">
+                            <option v-for="farm in farms" :key="farm._id || farm.id" :value="farm._id || farm.id">
+                                {{ farm.farm_name || farm.name }}
+                            </option>
+                        </select>
+                    </div>
+                    <button @click="refreshData" :disabled="loading" class="btn btn--secondary">
+                        <RefreshCw :class="{ 'spin': loading }" :size="16" />
+                        <span>Refresh</span>
+                    </button>
+                </div>
             </div>
 
-            <div v-if="recentAlerts.length === 0" class="empty-state">
-                <CheckCircle :size="48" class="empty-state__icon" />
-                <p>No active alerts. All systems operating normally.</p>
+            <div v-if="!hasDevice" class="dashboard-empty dashboard-empty--compact">
+                <Cpu :size="48" />
+                <h3>No device is registered for this farm</h3>
+                <p>Each farm can host one monitoring device. Add a device to start streaming data.</p>
+                <router-link to="/devices" class="btn btn--primary">
+                    Register Device
+                </router-link>
             </div>
 
-            <div v-else class="alerts-list">
-                <AlertItem v-for="alert in recentAlerts" :key="alert.id" :alert="alert" @resolve="handleResolveAlert" />
-            </div>
-        </div>
+            <template v-else>
+                <div v-if="!realtimeConnected" class="alert alert--warning">
+                    <AlertCircle :size="20" />
+                    <span>Real-time connection lost. Attempting to reconnect...</span>
+                </div>
+
+                <div class="metrics-grid">
+                    <MetricCard v-for="metric in metrics" :key="metric.id" :title="metric.title" :value="metric.value"
+                        :unit="metric.unit" :icon="metric.icon" :status="metric.status" :trend="metric.trend"
+                        :range-min="metric.rangeMin" :range-max="metric.rangeMax" :last-update="metric.lastUpdate"
+                        :loading="loading" />
+                </div>
+
+                <div class="charts-grid">
+                    <ChartCard :title="`pH Level (${chartTimeRangeLabel})`" :data="phData" chart-type="area"
+                        color="#3b82f6" :optimal-range="{ min: 6.5, max: 7.5 }" :loading="loading"
+                        @range-change="handleChartRangeChange" />
+
+                    <ChartCard :title="`Temperature (${chartTimeRangeLabel})`" :data="temperatureData" chart-type="line"
+                        color="#ef4444" :optimal-range="{ min: 20, max: 28 }" :loading="loading"
+                        @range-change="handleChartRangeChange" />
+                </div>
+
+                <div class="charts-grid">
+                    <ChartCard :title="`Light Intensity (${chartTimeRangeLabel})`" :data="lightData" chart-type="area"
+                        color="#f59e0b" :optimal-range="{ min: 3500, max: 5000 }" :loading="loading"
+                        @range-change="handleChartRangeChange" />
+
+                    <ChartCard :title="`Electrical Conductivity (${chartTimeRangeLabel})`" :data="ecData"
+                        chart-type="line" color="#10b981" :optimal-range="{ min: 1, max: 2.5 }" :loading="loading"
+                        @range-change="handleChartRangeChange" />
+                </div>
+
+                <div class="recent-alerts">
+                    <div class="section-header">
+                        <h2>Recent Alerts</h2>
+                        <router-link to="/alerts" class="link">View All</router-link>
+                    </div>
+
+                    <div v-if="recentAlerts.length === 0" class="empty-state">
+                        <CheckCircle :size="48" class="empty-state__icon" />
+                        <p>No active alerts. All systems operating normally.</p>
+                    </div>
+
+                    <div v-else class="alerts-list">
+                        <AlertItem v-for="alert in recentAlerts" :key="alert.id" :alert="alert"
+                            @resolve="handleResolveAlert" />
+                    </div>
+                </div>
+            </template>
+        </template>
     </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { RefreshCw, Download, AlertCircle, CheckCircle } from 'lucide-vue-next';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { RefreshCw, AlertCircle, CheckCircle, MapPin, Cpu } from 'lucide-vue-next';
 import { useSensorDataStore } from '@/stores/module/sensorData';
 import { useDevicesStore } from '@/stores/module/devices';
 import { useAlertsStore } from '@/stores/module/alerts';
+import { useFarmsStore } from '@/stores/module/farms';
 import websocketService from '@/services/websocket';
 import MetricCard from '@/components/Dashboard/MetricCard.vue';
 import ChartCard from '@/components/Dashboard/ChartCard.vue';
@@ -82,9 +110,10 @@ export default {
     name: 'DashboardView',
     components: {
         RefreshCw,
-        Download,
         AlertCircle,
         CheckCircle,
+        MapPin,
+        Cpu,
         MetricCard,
         ChartCard,
         AlertItem
@@ -93,118 +122,175 @@ export default {
         const sensorDataStore = useSensorDataStore();
         const devicesStore = useDevicesStore();
         const alertsStore = useAlertsStore();
+        const farmsStore = useFarmsStore();
 
         const loading = ref(false);
+        const chartTimeRange = ref('24h');
         const realtimeConnected = computed(() => sensorDataStore.realtimeConnected);
+        const farms = computed(() => farmsStore.farms);
+        const hasFarms = computed(() => farms.value.length > 0);
+        const selectedFarmId = computed({
+            get: () => farmsStore.selectedFarmId,
+            set: (value) => farmsStore.selectFarm(value)
+        });
 
-        // Metrics data
+        const chartTimeRangeLabel = computed(() => {
+            switch (chartTimeRange.value) {
+                case '24h': return '24 Hours';
+                case '7d': return '7 Days';
+                case '30d': return '30 Days';
+                default: return '24 Hours';
+            }
+        });
+
+        const hasDevice = computed(() => devicesStore.devices.length > 0);
+        const activeDevice = computed(() => devicesStore.devices[0] || null);
+        const activeReading = computed(() => {
+            if (!activeDevice.value) return null;
+            return sensorDataStore.getLatestReading(activeDevice.value.device_id);
+        });
+
+        const thresholds = sensorDataStore.thresholds;
+
+        const metricStatus = (key, value) => {
+            const range = thresholds[key];
+            if (value === null || value === undefined || !range) return 'unknown';
+            if (value < range.min || value > range.max) return 'critical';
+            const buffer = (range.max - range.min) * 0.1;
+            if (value < range.min + buffer || value > range.max - buffer) return 'warning';
+            return 'normal';
+        };
+
         const metrics = computed(() => {
-            const phDevice = devicesStore.devicesByType('pH')[0];
-            const tempDevice = devicesStore.devicesByType('temperature')[0];
-            const lightDevice = devicesStore.devicesByType('light')[0];
-            const oxygenDevice = devicesStore.devicesByType('oxygen')[0];
+            const reading = activeReading.value;
+            if (!reading) {
+                return [];
+            }
 
             return [
                 {
                     id: 'ph',
                     title: 'pH Level',
-                    value: phDevice ? sensorDataStore.getLatestReading(phDevice.id)?.value || 0 : 0,
+                    value: reading.ph?.value?.toFixed(2) ?? '--',
                     unit: 'pH',
                     icon: 'Droplet',
-                    status: phDevice ? sensorDataStore.getSensorStatus(phDevice.id) : 'unknown',
-                    trend: phDevice ? sensorDataStore.getTrend(phDevice.id) : null,
-                    rangeMin: 6.5,
-                    rangeMax: 7.5,
-                    lastUpdate: phDevice ? sensorDataStore.getLatestReading(phDevice.id)?.timestamp : null
+                    status: metricStatus('ph', reading.ph?.value),
+                    trend: null,
+                    rangeMin: thresholds.ph.min,
+                    rangeMax: thresholds.ph.max,
+                    lastUpdate: reading.timestamp
                 },
                 {
-                    id: 'temperature',
-                    title: 'Temperature',
-                    value: tempDevice ? sensorDataStore.getLatestReading(tempDevice.id)?.value || 0 : 0,
+                    id: 'water_temperature_c',
+                    title: 'Water Temperature',
+                    value: reading.temperature_water_c?.value?.toFixed(1) ?? '--',
                     unit: '°C',
                     icon: 'Thermometer',
-                    status: tempDevice ? sensorDataStore.getSensorStatus(tempDevice.id) : 'unknown',
-                    trend: tempDevice ? sensorDataStore.getTrend(tempDevice.id) : null,
-                    rangeMin: 20,
-                    rangeMax: 28,
-                    lastUpdate: tempDevice ? sensorDataStore.getLatestReading(tempDevice.id)?.timestamp : null
+                    status: metricStatus('water_temperature_c', reading.temperature_water_c?.value),
+                    trend: null,
+                    rangeMin: thresholds.water_temperature_c.min,
+                    rangeMax: thresholds.water_temperature_c.max,
+                    lastUpdate: reading.timestamp
                 },
                 {
-                    id: 'light',
+                    id: 'air_temperature_c',
+                    title: 'Air Temperature',
+                    value: reading.temperature_air_c?.value?.toFixed(1) ?? '--',
+                    unit: '°C',
+                    icon: 'Thermometer',
+                    status: metricStatus('air_temperature_c', reading.temperature_air_c?.value),
+                    trend: null,
+                    rangeMin: thresholds.air_temperature_c.min,
+                    rangeMax: thresholds.air_temperature_c.max,
+                    lastUpdate: reading.timestamp
+                },
+                {
+                    id: 'light_intensity',
                     title: 'Light Intensity',
-                    value: lightDevice ? sensorDataStore.getLatestReading(lightDevice.id)?.value || 0 : 0,
+                    value: reading.light_intensity?.value ?? '--',
                     unit: 'lux',
                     icon: 'Sun',
-                    status: lightDevice ? sensorDataStore.getSensorStatus(lightDevice.id) : 'unknown',
-                    trend: lightDevice ? sensorDataStore.getTrend(lightDevice.id) : null,
-                    rangeMin: 3500,
-                    rangeMax: 5000,
-                    lastUpdate: lightDevice ? sensorDataStore.getLatestReading(lightDevice.id)?.timestamp : null
+                    status: metricStatus('light_intensity', reading.light_intensity?.value),
+                    trend: null,
+                    rangeMin: thresholds.light_intensity.min,
+                    rangeMax: thresholds.light_intensity.max,
+                    lastUpdate: reading.timestamp
                 },
                 {
-                    id: 'oxygen',
-                    title: 'Dissolved O₂',
-                    value: oxygenDevice ? sensorDataStore.getLatestReading(oxygenDevice.id)?.value || 0 : 0,
-                    unit: 'mg/L',
+                    id: 'ec_value',
+                    title: 'Electrical Conductivity',
+                    value: reading.ec?.value?.toFixed(2) ?? '--',
+                    unit: 'mS/cm',
                     icon: 'Activity',
-                    status: oxygenDevice ? sensorDataStore.getSensorStatus(oxygenDevice.id) : 'unknown',
-                    trend: oxygenDevice ? sensorDataStore.getTrend(oxygenDevice.id) : null,
-                    rangeMin: 6.0,
-                    rangeMax: 9.0,
-                    lastUpdate: oxygenDevice ? sensorDataStore.getLatestReading(oxygenDevice.id)?.timestamp : null
+                    status: metricStatus('ec_value', reading.ec?.value),
+                    trend: null,
+                    rangeMin: thresholds.ec_value.min,
+                    rangeMax: thresholds.ec_value.max,
+                    lastUpdate: reading.timestamp
                 }
             ];
         });
 
-        // Chart data
-        const phData = computed(() => {
-            const device = devicesStore.devicesByType('pH')[0];
-            return device ? sensorDataStore.getHistoricalData(device.id, '24h') : [];
+        const historicalData = computed(() => {
+            if (!activeDevice.value) return [];
+            return sensorDataStore.getHistoricalData(activeDevice.value.device_id, chartTimeRange.value) || [];
         });
 
-        const temperatureData = computed(() => {
-            const device = devicesStore.devicesByType('temperature')[0];
-            return device ? sensorDataStore.getHistoricalData(device.id, '24h') : [];
-        });
-
-        const lightData = computed(() => {
-            const device = devicesStore.devicesByType('light')[0];
-            return device ? sensorDataStore.getHistoricalData(device.id, '24h') : [];
-        });
-
-        const oxygenData = computed(() => {
-            const device = devicesStore.devicesByType('oxygen')[0];
-            return device ? sensorDataStore.getHistoricalData(device.id, '24h') : [];
-        });
-
-        const recentAlerts = computed(() =>
-            alertsStore.unresolvedAlerts.slice(0, 5)
+        const phData = computed(() =>
+            historicalData.value
+                .filter(reading => reading.ph?.value !== undefined)
+                .map(reading => ({ x: reading.timestamp, y: reading.ph.value }))
         );
 
-        // Methods
+        const temperatureData = computed(() =>
+            historicalData.value
+                .filter(reading => reading.temperature_water_c?.value !== undefined)
+                .map(reading => ({ x: reading.timestamp, y: reading.temperature_water_c.value }))
+        );
+
+        const lightData = computed(() =>
+            historicalData.value
+                .filter(reading => reading.light_intensity?.value !== undefined)
+                .map(reading => ({ x: reading.timestamp, y: reading.light_intensity.value }))
+        );
+
+        const ecData = computed(() =>
+            historicalData.value
+                .filter(reading => reading.ec?.value !== undefined)
+                .map(reading => ({ x: reading.timestamp, y: reading.ec.value }))
+        );
+
+        const recentAlerts = computed(() => {
+            const deviceId = activeDevice.value?.device_id;
+            if (!deviceId) return [];
+            return alertsStore.unresolvedAlerts
+                .filter(alert => alert.device === deviceId)
+                .slice(0, 5);
+        });
+
         const refreshData = async () => {
+            if (!selectedFarmId.value) return;
             loading.value = true;
             try {
-                await Promise.all([
-                    devicesStore.fetchDevices(),
-                    sensorDataStore.fetchLatestReadings(),
-                    alertsStore.fetchAlerts({ resolved: false })
-                ]);
+                // Clear devices store before fetching new data
+                await devicesStore.fetchDevices(selectedFarmId.value);
+                const device = devicesStore.devices[0];
 
-                // Fetch historical data for all devices
-                for (const device of devicesStore.devices) {
-                    await sensorDataStore.fetchHistoricalData(device.id, { range: '24h' });
+                if (!device) {
+                    alertsStore.fetchAlerts({ resolved: false });
+                    return;
                 }
+
+                await Promise.all([
+                    sensorDataStore.fetchLatestReadings(device.device_id),
+                    sensorDataStore.fetchHistoricalData(device.device_id, { range: chartTimeRange.value }),
+                    alertsStore.fetchAlerts({ resolved: false, deviceId: device.device_id })
+                ]);
             } catch (error) {
                 console.error('Error refreshing data:', error);
             } finally {
                 loading.value = false;
             }
-        };
-
-        const exportData = () => {
-            // Implement export functionality
-            console.log('Exporting data...');
         };
 
         const handleResolveAlert = async (alertId) => {
@@ -215,7 +301,20 @@ export default {
             }
         };
 
-        // WebSocket event handlers
+        const handleChartRangeChange = async (range) => {
+            chartTimeRange.value = range;
+            if (activeDevice.value) {
+                loading.value = true;
+                try {
+                    await sensorDataStore.fetchHistoricalData(activeDevice.value.device_id, { range });
+                } catch (error) {
+                    console.error('Error fetching historical data:', error);
+                } finally {
+                    loading.value = false;
+                }
+            }
+        };
+
         const handleSensorReading = (reading) => {
             sensorDataStore.updateRealtimeReading(reading);
         };
@@ -228,11 +327,19 @@ export default {
             devicesStore.updateLocalDevice(status.deviceId, { status: status.status });
         };
 
-        onMounted(async () => {
-            await refreshData();
+        watch(() => farmsStore.selectedFarmId, async (newValue, oldValue) => {
+            if (newValue && newValue !== oldValue) {
+                await refreshData();
+            }
+        });
 
-            // Only setup WebSocket listeners if not already connected
-            // The DefaultLayout should handle the connection
+        onMounted(async () => {
+            // Always refresh farms and data when component mounts
+            await farmsStore.fetchFarms();
+            if (farmsStore.selectedFarmId) {
+                await refreshData();
+            }
+
             if (!websocketService.isConnected()) {
                 const token = localStorage.getItem('auth_token');
                 if (token) {
@@ -244,7 +351,6 @@ export default {
                 }
             }
 
-            // Setup WebSocket listeners
             websocketService.on('sensorReading', handleSensorReading);
             websocketService.on('alert', handleAlert);
             websocketService.on('deviceStatus', handleDeviceStatus);
@@ -255,11 +361,8 @@ export default {
                 sensorDataStore.setRealtimeConnection(false);
             });
 
-            // Subscribe to all devices only if connected
-            if (websocketService.isConnected()) {
-                devicesStore.devices.forEach(device => {
-                    websocketService.subscribeToDevice(device.id);
-                });
+            if (websocketService.isConnected() && activeDevice.value) {
+                websocketService.subscribeToDevice(activeDevice.value.device_id);
             }
         });
 
@@ -267,20 +370,26 @@ export default {
             websocketService.off('sensorReading', handleSensorReading);
             websocketService.off('alert', handleAlert);
             websocketService.off('deviceStatus', handleDeviceStatus);
-            // Don't disconnect here - let DefaultLayout handle it
         });
+
         return {
+            farms,
+            selectedFarmId,
+            hasFarms,
+            hasDevice,
             loading,
             realtimeConnected,
+            chartTimeRange,
+            chartTimeRangeLabel,
             metrics,
             phData,
             temperatureData,
             lightData,
-            oxygenData,
+            ecData,
             recentAlerts,
             refreshData,
-            exportData,
-            handleResolveAlert
+            handleResolveAlert,
+            handleChartRangeChange
         };
     }
 };
@@ -314,7 +423,50 @@ export default {
 
 .dashboard__actions {
     display: flex;
+    align-items: center;
     gap: 1rem;
+}
+
+.farm-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.farm-selector label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6b7280;
+}
+
+.farm-selector select {
+    min-width: 200px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+}
+
+.dashboard-empty {
+    border: 1px dashed #d1d5db;
+    border-radius: 0.75rem;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: #6b7280;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    background: white;
+    margin-bottom: 2rem;
+}
+
+.dashboard-empty svg {
+    color: #d1d5db;
+}
+
+.dashboard-empty--compact {
+    margin-bottom: 2rem;
 }
 
 .btn {
@@ -456,6 +608,11 @@ export default {
     .dashboard__actions {
         width: 100%;
         flex-direction: column;
+        align-items: stretch;
+    }
+
+    .farm-selector select {
+        width: 100%;
     }
 
     .btn {

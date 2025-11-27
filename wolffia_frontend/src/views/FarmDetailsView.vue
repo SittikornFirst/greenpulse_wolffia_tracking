@@ -33,31 +33,17 @@
                         <span class="info-label">Farm Name:</span>
                         <span class="info-value">{{ farm.farm_name }}</span>
                     </div>
-                    <div class="info-item">
+                    <div class="info-item" v-if="farm.location">
                         <span class="info-label">Location:</span>
-                        <span class="info-value">{{ farm.location?.address || farm.location?.name || 'N/A' }}</span>
+                        <span class="info-value">{{ farm.location }}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Area:</span>
-                        <span class="info-value">{{ farm.area || 0 }} m²</span>
+                        <span class="info-label">Device:</span>
+                        <span class="info-value">{{ deviceCount > 0 ? '1 Device Connected' : 'No Device' }}</span>
                     </div>
-                    <div class="info-item">
-                        <span class="info-label">Tank Count:</span>
-                        <span class="info-value">{{ farm.tank_count || 0 }}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Device Count:</span>
-                        <span class="info-value">{{ deviceCount }}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Status:</span>
-                        <span :class="['status-badge', `status-badge--${farm.status}`]">
-                            {{ farm.status }}
-                        </span>
-                    </div>
-                    <div class="info-item info-item--full">
+                    <div class="info-item info-item--full" v-if="farm.description">
                         <span class="info-label">Description:</span>
-                        <span class="info-value">{{ farm.description || 'No description provided' }}</span>
+                        <span class="info-value">{{ farm.description }}</span>
                     </div>
                 </div>
             </div>
@@ -105,21 +91,17 @@
             <!-- Devices Section -->
             <div class="devices-section">
                 <div class="section-header">
-                    <h2>Devices in this Farm</h2>
-                    <button @click="showAddDeviceModal = true" class="btn btn-primary">
-                        <Plus :size="20" />
-                        <span>Add Device</span>
-                    </button>
+                    <h2>Device in this Farm</h2>
                 </div>
 
                 <div v-if="farmDevices.length === 0" class="empty-state">
                     <Cpu :size="64" />
-                    <h3>No devices yet</h3>
-                    <p>Get started by adding your first device to this farm</p>
-                    <button @click="showAddDeviceModal = true" class="btn btn-primary">
+                    <h3>No device assigned</h3>
+                    <p>This farm doesn't have a device yet. Each farm can have one monitoring device.</p>
+                    <router-link to="/devices" class="btn btn-primary">
                         <Plus :size="20" />
-                        <span>Add First Device</span>
-                    </button>
+                        <span>Go to Devices</span>
+                    </router-link>
                 </div>
 
                 <div v-else class="devices-grid">
@@ -165,7 +147,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-    ArrowLeft, MapPin, Cpu, CheckCircle, AlertTriangle, XCircle,
+    ArrowLeft, MapPin, Cpu, CheckCircle, AlertTriangle, XCircle, AlertCircle,
     Settings, Plus
 } from 'lucide-vue-next';
 import apiService from '@/services/api';
@@ -179,6 +161,7 @@ export default {
         CheckCircle,
         AlertTriangle,
         XCircle,
+        AlertCircle,
         Settings,
         Plus
     },
@@ -188,7 +171,6 @@ export default {
         const loading = ref(false);
         const farm = ref(null);
         const farmDevices = ref([]);
-        const showAddDeviceModal = ref(false);
 
         const fetchFarmDetails = async () => {
             loading.value = true;
@@ -236,7 +218,6 @@ export default {
             activeDeviceCount,
             warningDeviceCount,
             offlineDeviceCount,
-            showAddDeviceModal,
             goToDeviceDetails,
             handleEditFarm
         };

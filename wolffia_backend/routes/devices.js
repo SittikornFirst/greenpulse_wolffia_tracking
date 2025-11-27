@@ -1,6 +1,8 @@
 import express from 'express';
 import Device from '../models/Device.js';
 import Farm from '../models/Farm.js';
+import DeviceConfiguration from '../models/DeviceConfiguration.js';
+import SystemLog from '../models/SystemLog.js';
 
 const router = express.Router();
 
@@ -35,7 +37,10 @@ router.get('/', async (req, res) => {
             query.farm_id = farmId;
         }
 
-        const devices = await Device.find(query).populate('farm_id', 'farm_name location').sort({ createdAt: -1 });
+        const devices = await Device.find(query)
+            .populate('farm_id', 'farm_name location')
+            .populate('config_id')
+            .sort({ created_at: -1 });
         res.json(devices);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -50,7 +55,7 @@ router.get('/:id', async (req, res) => {
                 { _id: req.params.id },
                 { device_id: req.params.id }
             ]
-        }).populate('farm_id', 'farm_name location');
+        }).populate('farm_id', 'farm_name location').populate('config_id');
 
         if (!device) {
             return res.status(404).json({ success: false, message: 'Device not found' });
@@ -83,6 +88,14 @@ router.post('/', async (req, res) => {
             });
         }
 
+        const existingFarmDevice = await Device.findOne({ farm_id: farmId });
+        if (existingFarmDevice) {
+            return res.status(400).json({
+                success: false,
+                message: 'Each farm can be linked to only one device.'
+            });
+        }
+
         // Generate device_id if not provided
         const generateDeviceId = () => {
             const timestamp = Date.now().toString(36);
@@ -91,45 +104,50 @@ router.post('/', async (req, res) => {
         };
 
         // Map frontend fields to backend fields
-        const deviceData = {
-            device_id: req.body.device_id || req.body.id || generateDeviceId(),
-            device_name: req.body.device_name || req.body.name || 'Unnamed Device',
-            farm_id: farmId, // Required - must reference existing farm
-            user_id: req.user?._id || req.body.user_id || null,
-            location: {
-                name: req.body.location?.name || req.body.location || '',
-                farm_name: farm.farm_name, // Keep for backward compatibility
-                address: req.body.location?.address || farm.location?.address || '',
-                coordinates: req.body.location?.coordinates || {}
-            },
-            status: req.body.status || 'active',
-            device_type: req.body.device_type || req.body.type || 'greenpulse-v1',
-            firmware_version: req.body.firmware_version || '1.0.0',
-            connectivity: req.body.connectivity || 'wifi'
-        };
-
-        // Set default thresholds if not provided
-        if (!deviceData.thresholds) {
-            deviceData.thresholds = {
-                ph: { min: 6.0, max: 7.5, optimal: 6.5 },
-                ec: { min: 1.0, max: 2.5, optimal: 1.8 },
-                temperature_water_c: { min: 20, max: 28, optimal: 24 },
-                temperature_air_c: { min: 18, max: 35, optimal: 26 },
-                light_intensity: { min: 3500, max: 6000, optimal: 4500 }
-            };
-        }
-
-        const device = new Device(deviceData);
-        await device.save();
-
-        // Update farm tank count if needed
-        if (deviceData.device_type === 'greenpulse-v1') {
-            await Farm.findByIdAndUpdate(farmId, {
-                $inc: { tank_count: 1 }
+        const ownerId = req.user?._id || req.body.user_id;
+        if (!ownerId) {
+            return res.status(400).json({
+                success: false,
+                message: 'user_id is required to register a device.'
             });
         }
 
-        res.status(201).json(device);
+        const deviceData = {
+            device_id: req.body.device_id || req.body.id || generateDeviceId(),
+            device_name: req.body.device_name || req.body.name || 'Unnamed Device',
+            farm_id: farmId,
+            user_id: ownerId,
+            location: req.body.location || farm.location,
+            status: req.body.status || 'active'
+        };
+
+        const device = await Device.create(deviceData);
+
+        const config = await DeviceConfiguration.create({
+            device_id: device._id,
+            mqtt_topic: req.body.mqtt_topic || `devices/${device.device_id}/data`,
+            alert_enabled: req.body.alert_enabled ?? true,
+            sampling_interval: req.body.sampling_interval || 300,
+            ph_min: 6.0,
+            ph_max: 7.5,
+            ec_value_min: 1.0,
+            ec_value_max: 2.5,
+            light_intensity_min: 3500,
+            light_intensity_max: 6000,
+            air_temp_min: 18,
+            air_temp_max: 35,
+            water_temp_min: 20,
+            water_temp_max: 28
+        });
+
+        device.config_id = config._id;
+        await device.save();
+
+        const hydratedDevice = await Device.findById(device._id)
+            .populate('farm_id', 'farm_name location')
+            .populate('config_id');
+
+        res.status(201).json(hydratedDevice);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -143,17 +161,28 @@ router.put('/:id', async (req, res) => {
             updateData.device_name = updateData.name;
             delete updateData.name;
         }
+        if (updateData.location?.address && typeof updateData.location !== 'string') {
+            updateData.location = updateData.location.address;
+        }
+
+        // Build query - check if id is a valid ObjectId first
+        const mongoose = await import('mongoose');
+        const query = {};
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            query.$or = [
+                { _id: req.params.id },
+                { device_id: req.params.id }
+            ];
+        } else {
+            // If not a valid ObjectId, only search by device_id
+            query.device_id = req.params.id;
+        }
 
         const device = await Device.findOneAndUpdate(
-            {
-                $or: [
-                    { _id: req.params.id },
-                    { device_id: req.params.id }
-                ]
-            },
+            query,
             updateData,
             { new: true, runValidators: true }
-        );
+        ).populate('farm_id', 'farm_name location').populate('config_id');
 
         if (!device) {
             return res.status(404).json({ success: false, message: 'Device not found' });
@@ -169,22 +198,77 @@ router.put('/:id', async (req, res) => {
 router.patch('/:id/status', async (req, res) => {
     try {
         const { status } = req.body;
+
+        // Build query - check if id is a valid ObjectId first
+        const mongoose = await import('mongoose');
+        const query = {};
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            query.$or = [
+                { _id: req.params.id },
+                { device_id: req.params.id }
+            ];
+        } else {
+            // If not a valid ObjectId, only search by device_id
+            query.device_id = req.params.id;
+        }
+
         const device = await Device.findOneAndUpdate(
-            {
-                $or: [
-                    { _id: req.params.id },
-                    { device_id: req.params.id }
-                ]
-            },
+            query,
             { status },
             { new: true }
-        );
+        ).populate('farm_id', 'farm_name location').populate('config_id');
 
         if (!device) {
             return res.status(404).json({ success: false, message: 'Device not found' });
         }
 
         res.json(device);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+// Update device configuration/thresholds
+router.put('/:id/configuration', async (req, res) => {
+    try {
+        const device = await Device.findOne({
+            $or: [
+                { _id: req.params.id },
+                { device_id: req.params.id }
+            ]
+        });
+
+        if (!device) {
+            return res.status(404).json({ success: false, message: 'Device not found' });
+        }
+
+        // Update or create configuration
+        const configData = {
+            device_id: device._id,
+            ...req.body
+        };
+
+        let config = await DeviceConfiguration.findOneAndUpdate(
+            { device_id: device._id },
+            configData,
+            { new: true, upsert: true, runValidators: true }
+        );
+
+        // Update device's config_id reference
+        device.config_id = config._id;
+        await device.save();
+
+        // Log the configuration change
+        await SystemLog.create({
+            device_id: device._id,
+            config_id: config._id,
+            event_type: 'config_change',
+            severity: 'info',
+            description: 'Device configuration updated',
+            details: { updated_fields: Object.keys(req.body) }
+        });
+
+        res.json(config);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -204,12 +288,8 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Device not found' });
         }
 
-        // Decrement farm tank count if needed
-        if (device.farm_id && device.device_type === 'greenpulse-v1') {
-            await Farm.findByIdAndUpdate(device.farm_id, {
-                $inc: { tank_count: -1 }
-            });
-        }
+        await DeviceConfiguration.findOneAndDelete({ device_id: device._id });
+        await SystemLog.deleteMany({ device_id: device._id });
 
         res.json({ success: true, message: 'Device deleted' });
     } catch (error) {

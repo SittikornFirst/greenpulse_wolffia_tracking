@@ -35,18 +35,12 @@
         </div>
 
         <div class="alert-item__actions">
-            <button v-if="!alert.resolved" @click="handleResolve" :disabled="resolving" class="btn btn--resolve"
-                title="Mark as resolved">
-                <CheckCircle :size="16" />
-                <span>Resolve</span>
-            </button>
-
             <button v-if="showDetails" @click="$emit('view-details', alert)" class="btn btn--secondary"
                 title="View details">
                 <Eye :size="16" />
             </button>
 
-            <button v-if="allowDelete" @click="handleDelete" :disabled="deleting" class="btn btn--danger"
+            <button v-if="allowDelete && alert.resolved" @click="handleDelete" :disabled="deleting" class="btn btn--danger"
                 title="Delete alert">
                 <Trash2 :size="16" />
             </button>
@@ -203,15 +197,18 @@ export default {
 }
 
 .alert-item--high {
-    border-left-color: #ef4444;
+    border-left-color: #dc2626;
+    background: #fef2f2;
 }
 
 .alert-item--medium {
-    border-left-color: #f59e0b;
+    border-left-color: #ea580c;
+    background: #fff7ed;
 }
 
 .alert-item--low {
-    border-left-color: #3b82f6;
+    border-left-color: #2563eb;
+    background: #eff6ff;
 }
 
 .alert-item--resolved {
@@ -230,18 +227,18 @@ export default {
 }
 
 .alert-item--high .alert-item__icon {
-    background: #fee2e2;
-    color: #dc2626;
+    background: #fecaca;
+    color: #991b1b;
 }
 
 .alert-item--medium .alert-item__icon {
-    background: #fef3c7;
-    color: #d97706;
+    background: #fed7aa;
+    color: #9a3412;
 }
 
 .alert-item--low .alert-item__icon {
-    background: #dbeafe;
-    color: #2563eb;
+    background: #bfdbfe;
+    color: #1e40af;
 }
 
 .alert-item__content {
@@ -274,18 +271,18 @@ export default {
 }
 
 .alert-badge--high {
-    background: #fee2e2;
-    color: #991b1b;
+    background: #dc2626;
+    color: white;
 }
 
 .alert-badge--medium {
-    background: #fef3c7;
-    color: #92400e;
+    background: #ea580c;
+    color: white;
 }
 
 .alert-badge--low {
-    background: #dbeafe;
-    color: #1e40af;
+    background: #2563eb;
+    color: white;
 }
 
 .alert-item__meta {

@@ -1,63 +1,90 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const alertSchema = new mongoose.Schema({
+    alert_id: {
+        type: String,
+        required: true,
+        unique: true,
+        default: () => crypto.randomUUID()
+    },
     device_id: {
         type: String,
         required: true,
         ref: 'Device'
     },
+    data_id: {
+        type: String,
+        ref: 'SensorData'
+    },
     user_id: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+        ref: 'User'
     },
     alert_type: {
         type: String,
-        required: true,
-        enum: [
-            'ph_high', 'ph_low',
-            'ec_high', 'ec_low',
-            'temp_water_high', 'temp_water_low',
-            'temp_air_high', 'temp_air_low',
-            'light_high', 'light_low',
-            'sensor_error',
-            'device_offline',
-            'calibration_needed',
-            'system_error'
-        ]
+        required: true
     },
-    priority: {
+    parameter: {
         type: String,
-        enum: ['low', 'medium', 'high', 'critical'],
-        default: 'medium'
+        required: true
     },
-    title: {
-        type: String,
+    threshold_value: {
+        type: Number,
+        required: true
+    },
+    actual_value: {
+        type: Number,
         required: true
     },
     message: {
         type: String,
         required: true
     },
-    sensor_reading: {
-        type: mongoose.Schema.Types.Mixed
+    severity: {
+        type: String,
+        enum: ['low', 'medium', 'high', 'critical'],
+        default: 'medium'
     },
     status: {
         type: String,
-        enum: ['active', 'acknowledged', 'resolved', 'dismissed'],
+        enum: ['active', 'acknowledged', 'resolved'],
         default: 'active'
     },
-    resolved_at: Date,
-    notification_sent: {
-        email: Boolean,
-        sms: Boolean,
-        push: Boolean
+    resolved_at: {
+        type: Date
     }
 }, {
-    timestamps: true
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true }
 });
 
-alertSchema.index({ device_id: 1, status: 1, createdAt: -1 });
-alertSchema.index({ user_id: 1, status: 1, priority: -1 });
+alertSchema.index({ device_id: 1, created_at: -1 });
+alertSchema.index({ status: 1, severity: -1 });
+
+alertSchema.virtual('id').get(function () {
+    return this._id?.toString();
+});
+
+alertSchema.virtual('type').get(function () {
+    return this.severity;
+});
+
+alertSchema.virtual('resolved').get(function () {
+    return this.status === 'resolved';
+});
+
+alertSchema.virtual('resolvedAt').get(function () {
+    return this.resolved_at;
+});
+
+alertSchema.virtual('device').get(function () {
+    return this.device_id;
+});
+
+alertSchema.virtual('time').get(function () {
+    return this.created_at;
+});
 
 export default mongoose.model('Alert', alertSchema);

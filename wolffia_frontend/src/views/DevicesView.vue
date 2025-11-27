@@ -23,20 +23,11 @@
                 </div>
             </div>
             <div class="stat-card">
-                <div class="stat-icon stat-icon--warning">
-                    <AlertTriangle :size="24" />
-                </div>
-                <div class="stat-content">
-                    <p class="stat-label">Warning Status</p>
-                    <p class="stat-value">{{ warningDevicesCount }}</p>
-                </div>
-            </div>
-            <div class="stat-card">
                 <div class="stat-icon stat-icon--danger">
                     <XCircle :size="24" />
                 </div>
                 <div class="stat-content">
-                    <p class="stat-label">Offline Devices</p>
+                    <p class="stat-label">Deactive Devices</p>
                     <p class="stat-value">{{ offlineDevicesCount }}</p>
                 </div>
             </div>
@@ -55,21 +46,18 @@
         <div class="filters">
             <div class="search-box">
                 <Search :size="20" />
-                <input v-model="searchQuery" type="text" placeholder="Search devices..." />
+                <input v-model="searchQuery" type="text" placeholder="Search devices or farms..." />
             </div>
-            <select v-model="filterType" class="filter-select">
-                <option value="">All Types</option>
-                <option value="pH">pH Sensors</option>
-                <option value="temperature">Temperature</option>
-                <option value="light">Light Intensity</option>
-                <option value="oxygen">Dissolved Oxygen</option>
-            </select>
             <select v-model="filterStatus" class="filter-select">
                 <option value="">All Status</option>
                 <option value="active">Active</option>
-                <option value="warning">Warning</option>
+                <option value="maintenance">Maintenance</option>
                 <option value="inactive">Inactive</option>
             </select>
+            <router-link to="/farms" class="btn btn-secondary">
+                <MapPin :size="16" />
+                Manage Farms
+            </router-link>
         </div>
 
         <!-- Loading State -->
@@ -94,8 +82,8 @@
             <div v-for="device in filteredDevices" :key="device.id" class="device-card"
                 @click="goToDeviceDetails(device.id)">
                 <div class="device-header">
-                    <div class="device-icon" :class="`device-icon--${device.type}`">
-                        <component :is="getDeviceIcon(device.type)" :size="24" />
+                    <div class="device-icon device-icon--generic">
+                        <component :is="getDeviceIcon(device.device_type)" :size="24" />
                     </div>
                     <div class="device-status">
                         <span :class="['status-dot', `status-dot--${device.status}`]"></span>
@@ -105,7 +93,7 @@
 
                 <div class="device-body">
                     <h3 class="device-name">{{ device.device_name }}</h3>
-                    <p class="device-type">{{ getDeviceTypeLabel(device.type) }}</p>
+                    <p class="device-type">{{ device.farmName || 'Unassigned' }}</p>
 
                     <div class="device-info">
                         <div class="info-item">
@@ -113,24 +101,36 @@
                             <span class="info-value">{{ device.device_id }}</span>
                         </div>
                         <div class="info-item">
-                            <span class="info-label">Last Reading:</span>
-                            <span class="info-value">{{ device.lastReading || 'N/A' }}</span>
+                            <span class="info-label">Location:</span>
+                            <span class="info-value">{{ device.location || 'Not specified' }}</span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Last Update:</span>
-                            <span class="info-value">{{ formatTime(device.updatedAt) }}</span>
+                            <span class="info-value">{{ formatTime(device.lastActivity || device.updatedAt) }}</span>
+                        </div>
+                    </div>
+
+                    <div v-if="device.configuration" class="config-summary">
+                        <div class="config-row">
+                            <span class="config-label">Sampling Interval</span>
+                            <span class="config-value">{{ device.configuration.sampling_interval }}s</span>
+                        </div>
+                        <div class="config-row">
+                            <span class="config-label">MQTT Topic</span>
+                            <span class="config-value">{{ device.configuration.mqtt_topic }}</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="device-footer">
-                    <button @click.stop="handleEditDevice(device)" class="btn btn-secondary btn-sm">
+                    <button @click.stop="openConfigModal(device)" class="btn btn-secondary btn-sm">
                         <Settings :size="16" />
-                        <span>Configure</span>
+                        <span>View Config</span>
                     </button>
-                    <button @click.stop="handleDeleteDevice(device.device_id)" class="btn btn-danger btn-sm">
-                        <Trash2 :size="16" />
-                        <span>Remove</span>
+                    <button @click.stop="handleToggleDeviceStatus(device)" 
+                        :class="['btn', 'btn-sm', device.status === 'inactive' ? 'btn-success' : 'btn-warning']">
+                        <component :is="device.status === 'inactive' ? CheckCircle : XCircle" :size="16" />
+                        <span>{{ device.status === 'inactive' ? 'Activate' : 'Deactivate' }}</span>
                     </button>
                 </div>
             </div>
@@ -154,22 +154,11 @@
                         </div>
 
                         <div class="form-group">
-                            <label for="device-type">Sensor Type</label>
-                            <select id="device-type" v-model="newDevice.type" required>
-                                <option value="">Select type</option>
-                                <option value="pH">pH Sensor</option>
-                                <option value="temperature">Temperature Sensor</option>
-                                <option value="light">Light Intensity Sensor</option>
-                                <option value="oxygen">Dissolved Oxygen Sensor</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group">
                             <label for="device-farm">Farm Assignment *</label>
                             <select id="device-farm" v-model="newDevice.farmId" required>
                                 <option value="">Select farm</option>
                                 <option v-for="farm in farms" :key="farm._id || farm.id" :value="farm._id || farm.id">
-                                    {{ farm.name || farm.farm_name }}
+                                    {{ farm.farm_name || farm.name }}
                                 </option>
                             </select>
                             <p v-if="farms.length === 0" class="form-hint">
@@ -195,6 +184,56 @@
                 </div>
             </div>
         </div>
+
+        <!-- Configuration Modal -->
+        <div v-if="showConfigModal && configDevice" class="modal-overlay" @click="showConfigModal = false">
+            <div class="modal" @click.stop>
+                <div class="modal-header">
+                    <h2>Device Configuration</h2>
+                    <button @click="showConfigModal = false" class="close-btn">
+                        <X :size="20" />
+                    </button>
+                </div>
+                <div class="modal-body config-modal-body">
+                    <p class="config-device-title">{{ configDevice.device_name }}</p>
+                    <div v-if="configDevice.configuration" class="config-grid">
+                        <div class="config-field">
+                            <span class="config-label">MQTT Topic</span>
+                            <span class="config-value">{{ configDevice.configuration.mqtt_topic }}</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Sampling Interval</span>
+                            <span class="config-value">{{ configDevice.configuration.sampling_interval }} seconds</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Alerts</span>
+                            <span class="config-value">{{ configDevice.configuration.alert_enabled_label }}</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">pH Range</span>
+                            <span class="config-value">{{ configDevice.configuration.ph_min }} - {{ configDevice.configuration.ph_max }}</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">EC Range</span>
+                            <span class="config-value">{{ configDevice.configuration.ec_value_min }} - {{ configDevice.configuration.ec_value_max }}</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Air Temp</span>
+                            <span class="config-value">{{ configDevice.configuration.air_temp_min }} - {{ configDevice.configuration.air_temp_max }} °C</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Water Temp</span>
+                            <span class="config-value">{{ configDevice.configuration.water_temp_min }} - {{ configDevice.configuration.water_temp_max }} °C</span>
+                        </div>
+                        <div class="config-field">
+                            <span class="config-label">Light Intensity</span>
+                            <span class="config-value">{{ configDevice.configuration.light_intensity_min }} - {{ configDevice.configuration.light_intensity_max }} lux</span>
+                        </div>
+                    </div>
+                    <p v-else>No configuration record found for this device.</p>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -203,57 +242,40 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
     Plus, Search, Cpu, Droplet, Thermometer, Sun, Activity,
-    CheckCircle, AlertTriangle, XCircle, Settings, Trash2, X
+    CheckCircle, AlertTriangle, XCircle, Settings, Trash2, X, MapPin
 } from 'lucide-vue-next';
 import { useDevicesStore } from '@/stores/module/devices';
-import apiService from '@/services/api';
+import { useFarmsStore } from '@/stores/module/farms';
 
 export default {
     name: 'DevicesView',
     components: {
         Plus, Search, Cpu, Droplet, Thermometer, Sun, Activity,
-        CheckCircle, AlertTriangle, XCircle, Settings, Trash2, X
+        CheckCircle, AlertTriangle, XCircle, Settings, Trash2, X, MapPin
     },
     setup() {
         const router = useRouter();
         const devicesStore = useDevicesStore();
+        const farmsStore = useFarmsStore();
 
         const loading = ref(false);
         const searchQuery = ref('');
-        const filterType = ref('');
         const filterStatus = ref('');
         const showAddModal = ref(false);
         const adding = ref(false);
-        const farms = ref([]); // Add farms list
-        const loadingFarms = ref(false);
+        const showConfigModal = ref(false);
+        const configDevice = ref(null);
 
         const newDevice = ref({
             name: '',
-            type: '',
-            farmId: '', // This will be farm_id
+            farmId: '',
             location: ''
         });
 
-        // Fetch farms from API
-        const fetchFarms = async () => {
-            loadingFarms.value = true;
-            try {
-                const response = await apiService.getFarms();
-                farms.value = response.data || [];
-            } catch (error) {
-                console.error('Failed to fetch farms:', error);
-                farms.value = [];
-            } finally {
-                loadingFarms.value = false;
-            }
-        };
+        const farms = computed(() => farmsStore.farms);
 
         const activeDevicesCount = computed(() =>
             devicesStore.devices.filter(d => d.status === 'active').length
-        );
-
-        const warningDevicesCount = computed(() =>
-            devicesStore.devices.filter(d => d.status === 'warning').length
         );
 
         const offlineDevicesCount = computed(() =>
@@ -268,13 +290,10 @@ export default {
             if (searchQuery.value) {
                 const query = searchQuery.value.toLowerCase();
                 devices = devices.filter(d =>
-                    d.name.toLowerCase().includes(query) ||
-                    d.id.toLowerCase().includes(query)
+                    d.device_name?.toLowerCase().includes(query) ||
+                    d.device_id?.toLowerCase().includes(query) ||
+                    d.farmName?.toLowerCase().includes(query)
                 );
-            }
-
-            if (filterType.value) {
-                devices = devices.filter(d => d.type === filterType.value);
             }
 
             if (filterStatus.value) {
@@ -284,25 +303,9 @@ export default {
             return devices;
         });
 
-        const getDeviceIcon = (type) => {
-            const icons = {
-                pH: Droplet,
-                temperature: Thermometer,
-                light: Sun,
-                oxygen: Activity
-            };
-            return icons[type] || Cpu;
-        };
+        const getDeviceIcon = () => Cpu;
 
-        const getDeviceTypeLabel = (type) => {
-            const labels = {
-                pH: 'pH Sensor',
-                temperature: 'Temperature Sensor',
-                light: 'Light Intensity Sensor',
-                oxygen: 'Dissolved Oxygen Sensor'
-            };
-            return labels[type] || type;
-        };
+        const getDeviceTypeLabel = () => 'Wolffia Monitor';
 
         const formatTime = (timestamp) => {
             if (!timestamp) return 'Never';
@@ -321,7 +324,6 @@ export default {
         };
 
         const handleAddDevice = async () => {
-            // Validate farm is selected
             if (!newDevice.value.farmId) {
                 alert('Please select a farm first. If no farms exist, please create one in the Farms page.');
                 return;
@@ -329,17 +331,13 @@ export default {
 
             adding.value = true;
             try {
-                // Map to backend format
-                const deviceData = {
+                await devicesStore.addDevice({
                     name: newDevice.value.name,
-                    type: newDevice.value.type,
-                    farm_id: newDevice.value.farmId, // Use farm_id for backend
+                    farm_id: newDevice.value.farmId,
                     location: newDevice.value.location
-                };
-
-                await devicesStore.addDevice(deviceData);
+                });
                 showAddModal.value = false;
-                newDevice.value = { name: '', type: '', farmId: '', location: '' };
+                newDevice.value = { name: '', farmId: '', location: '' };
             } catch (error) {
                 alert('Failed to add device: ' + (error.response?.data?.message || error.message));
             } finally {
@@ -351,14 +349,26 @@ export default {
             router.push(`/devices/${device.id}`);
         };
 
-        const handleDeleteDevice = async (deviceId) => {
-            if (!confirm('Are you sure you want to remove this device?')) return;
+        const handleToggleDeviceStatus = async (device) => {
+            const newStatus = device.status === 'inactive' ? 'active' : 'inactive';
+            const action = newStatus === 'inactive' ? 'deactivate' : 'activate';
+            
+            if (!confirm(`Are you sure you want to ${action} this device?`)) return;
 
             try {
-                await devicesStore.removeDevice(deviceId);
+                await devicesStore.updateDevice(device.device_id, { status: newStatus });
+                // Refresh the device list to ensure UI is in sync
+                await devicesStore.fetchDevices();
+                alert(`Device ${action}d successfully!`);
             } catch (error) {
-                alert('Failed to remove device: ' + error.message);
+                console.error('Toggle device status error:', error);
+                alert(`Failed to ${action} device: ` + (error.response?.data?.message || error.message));
             }
+        };
+
+        const openConfigModal = (device) => {
+            configDevice.value = device;
+            showConfigModal.value = true;
         };
 
         onMounted(async () => {
@@ -366,7 +376,7 @@ export default {
             try {
                 await Promise.all([
                     devicesStore.fetchDevices(),
-                    fetchFarms() // Fetch farms on mount
+                    farmsStore.farms.length ? Promise.resolve() : farmsStore.fetchFarms()
                 ]);
             } catch (error) {
                 console.error('Failed to fetch data:', error);
@@ -378,15 +388,12 @@ export default {
         return {
             loading,
             searchQuery,
-            filterType,
             filterStatus,
             showAddModal,
             adding,
-            farms, // Export farms
-            loadingFarms,
+            farms,
             newDevice,
             activeDevicesCount,
-            warningDevicesCount,
             offlineDevicesCount,
             totalDevicesCount,
             filteredDevices,
@@ -396,7 +403,10 @@ export default {
             goToDeviceDetails,
             handleAddDevice,
             handleEditDevice,
-            handleDeleteDevice
+            handleToggleDeviceStatus,
+            showConfigModal,
+            configDevice,
+            openConfigModal
         };
     }
 };
@@ -465,6 +475,24 @@ export default {
 
 .btn-danger:hover {
     background: #fecaca;
+}
+
+.btn-success {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.btn-success:hover {
+    background: #a7f3d0;
+}
+
+.btn-warning {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.btn-warning:hover {
+    background: #fde68a;
 }
 
 .btn-sm {
@@ -646,6 +674,11 @@ export default {
     justify-content: center;
 }
 
+.device-icon--generic {
+    background: #c7d2fe;
+    color: #312e81;
+}
+
 .device-icon--pH {
     background: #dbeafe;
     color: #2563eb;
@@ -716,6 +749,29 @@ export default {
     gap: 0.5rem;
 }
 
+.config-summary {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    margin-top: 1rem;
+}
+
+.config-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+}
+
+.config-label {
+    color: #6b7280;
+}
+
+.config-value {
+    font-weight: 600;
+    color: #111827;
+}
+
 .info-item {
     display: flex;
     justify-content: space-between;
@@ -729,6 +785,32 @@ export default {
 .info-value {
     color: #1f2937;
     font-weight: 500;
+}
+
+.config-modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.config-device-title {
+    font-weight: 600;
+    color: #111827;
+}
+
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
 }
 
 .device-footer {

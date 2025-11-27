@@ -117,6 +117,10 @@ const apiService = {
         return apiClient.patch(`/devices/${deviceId}/status`, { status });
     },
 
+    async updateDeviceConfiguration(deviceId, configData) {
+        return apiClient.put(`/devices/${deviceId}/configuration`, configData);
+    },
+
     // ==================== Sensor Data ====================
     async getLatestReadings(deviceId = null) {
         if (deviceId) {

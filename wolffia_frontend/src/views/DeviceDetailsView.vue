@@ -23,6 +23,10 @@
             <div class="info-card">
                 <div class="card-header">
                     <h2>Device Information</h2>
+                    <button @click="showThresholdModal = true" class="btn btn-secondary">
+                        <Settings :size="16" />
+                        <span>Configure Device</span>
+                    </button>
                 </div>
                 <div class="info-grid">
                     <div class="info-item">
@@ -33,30 +37,21 @@
                         <span class="info-label">Device Name:</span>
                         <span class="info-value">{{ device.device_name }}</span>
                     </div>
-                    <div class="info-item">
+                    <div class="info-item" v-if="device.location">
                         <span class="info-label">Location:</span>
-                        <span class="info-value">{{ device.location?.name || 'N/A' }}</span>
+                        <span class="info-value">{{ device.location }}</span>
                     </div>
-                    <div class="info-item">
+                    <div class="info-item" v-if="device.farm_id || device.farmName">
                         <span class="info-label">Farm:</span>
                         <span class="info-value">
-                            <router-link v-if="device.farm_id" :to="`/farms/${device.farm_id}`" class="farm-link">
-                                {{ device.location?.farm_name || 'N/A' }}
+                            <router-link v-if="device.farm_id"
+                                :to="`/farms/${typeof device.farm_id === 'object' ? device.farm_id._id : device.farm_id}`"
+                                class="farm-link">
+                                {{ device.farmName || (typeof device.farm_id === 'object' ? device.farm_id.farm_name :
+                                    'Farm') }}
                             </router-link>
-                            <span v-else>{{ device.location?.farm_name || 'N/A' }}</span>
+                            <span v-else>{{ device.farmName }}</span>
                         </span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Device Type:</span>
-                        <span class="info-value">{{ device.device_type || 'N/A' }}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Firmware:</span>
-                        <span class="info-value">{{ device.firmware_version || 'N/A' }}</span>
-                    </div>
-                    <div class="info-item">
-                        <span class="info-label">Connectivity:</span>
-                        <span class="info-value">{{ device.connectivity || 'N/A' }}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Status:</span>
@@ -68,7 +63,7 @@
             </div>
 
             <!-- Latest Readings Card -->
-            <div class="readings-card">
+            <!-- <div class="readings-card">
                 <div class="card-header">
                     <h2>Latest Readings</h2>
                     <button @click="refreshReadings" class="refresh-btn" :disabled="loading">
@@ -109,7 +104,7 @@
                         <div class="reading-content">
                             <span class="reading-label">Water Temperature</span>
                             <span class="reading-value">{{ latestReading.temperature_water_c?.value?.toFixed(1) || 'N/A'
-                                }}°C</span>
+                            }}°C</span>
                             <span
                                 :class="['reading-status', `reading-status--${latestReading.temperature_water_c?.status || 'normal'}`]">
                                 {{ latestReading.temperature_water_c?.status || 'N/A' }}
@@ -123,7 +118,7 @@
                         <div class="reading-content">
                             <span class="reading-label">Air Temperature</span>
                             <span class="reading-value">{{ latestReading.temperature_air_c?.value?.toFixed(1) || 'N/A'
-                                }}°C</span>
+                            }}°C</span>
                             <span
                                 :class="['reading-status', `reading-status--${latestReading.temperature_air_c?.status || 'normal'}`]">
                                 {{ latestReading.temperature_air_c?.status || 'N/A' }}
@@ -150,8 +145,8 @@
                 </div>
             </div>
 
-            <!-- Charts Section -->
-            <div class="charts-section">
+            Charts Section -->
+            <!-- <div class="charts-section">
                 <ChartCard title="pH Level (24 Hours)" :data="phData" chart-type="line" color="#3b82f6"
                     :optimal-range="{ min: 6.0, max: 7.5 }" />
                 <ChartCard title="Water Temperature (24 Hours)" :data="temperatureData" chart-type="area"
@@ -161,9 +156,9 @@
                 <ChartCard title="Light Intensity (24 Hours)" :data="lightData" chart-type="area" color="#f59e0b"
                     :optimal-range="{ min: 3500, max: 6000 }" />
             </div>
-        </div>
+        </div> -->
 
-        <div v-else class="error-state">
+            <!-- <div v-else class="error-state">
             <AlertCircle :size="48" />
             <h3>Device Not Found</h3>
             <p>The device you're looking for doesn't exist or has been removed.</p>
@@ -171,6 +166,125 @@
                 <ArrowLeft :size="16" />
                 <span>Back to Devices</span>
             </button>
+        </div> -->
+
+            <!-- Threshold Configuration Modal -->
+            <div v-if="showThresholdModal" class="modal-overlay" @click="showThresholdModal = false">
+                <div class="modal" @click.stop>
+                    <div class="modal-header">
+                        <h2>Device Configuration</h2>
+                        <button @click="showThresholdModal = false" class="close-btn">
+                            <X :size="20" />
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <form @submit.prevent="saveThresholds">
+                            <div class="threshold-group">
+                                <h3>Device Settings</h3>
+                                <div class="threshold-inputs">
+                                    <div class="input-group">
+                                        <label>Sampling Interval (seconds)</label>
+                                        <input v-model.number="thresholds.sampling_interval" type="number" min="10"
+                                            step="1" required />
+                                        <span class="input-hint">How often the device collects sensor data</span>
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Alert Enabled</label>
+                                        <select v-model="thresholds.alert_enabled" class="select-input">
+                                            <option :value="true">Yes</option>
+                                            <option :value="false">No</option>
+                                        </select>
+                                        <span class="input-hint">Enable/disable threshold alerts</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="threshold-group">
+                                <h3>pH Level</h3>
+                                <div class="threshold-inputs">
+                                    <div class="input-group">
+                                        <label>Minimum</label>
+                                        <input v-model.number="thresholds.ph.min" type="number" step="0.1" required />
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Maximum</label>
+                                        <input v-model.number="thresholds.ph.max" type="number" step="0.1" required />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="threshold-group">
+                                <h3>Water Temperature (°C)</h3>
+                                <div class="threshold-inputs">
+                                    <div class="input-group">
+                                        <label>Minimum</label>
+                                        <input v-model.number="thresholds.water_temp.min" type="number" step="0.1"
+                                            required />
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Maximum</label>
+                                        <input v-model.number="thresholds.water_temp.max" type="number" step="0.1"
+                                            required />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="threshold-group">
+                                <h3>Air Temperature (°C)</h3>
+                                <div class="threshold-inputs">
+                                    <div class="input-group">
+                                        <label>Minimum</label>
+                                        <input v-model.number="thresholds.air_temp.min" type="number" step="0.1"
+                                            required />
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Maximum</label>
+                                        <input v-model.number="thresholds.air_temp.max" type="number" step="0.1"
+                                            required />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="threshold-group">
+                                <h3>EC (mS/cm)</h3>
+                                <div class="threshold-inputs">
+                                    <div class="input-group">
+                                        <label>Minimum</label>
+                                        <input v-model.number="thresholds.ec.min" type="number" step="0.1" required />
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Maximum</label>
+                                        <input v-model.number="thresholds.ec.max" type="number" step="0.1" required />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="threshold-group">
+                                <h3>Light Intensity (lux)</h3>
+                                <div class="threshold-inputs">
+                                    <div class="input-group">
+                                        <label>Minimum</label>
+                                        <input v-model.number="thresholds.light.min" type="number" step="1" required />
+                                    </div>
+                                    <div class="input-group">
+                                        <label>Maximum</label>
+                                        <input v-model.number="thresholds.light.max" type="number" step="1" required />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="modal-actions">
+                                <button type="button" @click="showThresholdModal = false" class="btn btn-secondary">
+                                    Cancel
+                                </button>
+                                <button type="submit" :disabled="saving" class="btn btn-primary">
+                                    {{ saving ? 'Saving...' : 'Save Configuration' }}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -178,7 +292,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft, RefreshCw, Droplet, Thermometer, Sun, Activity, AlertCircle } from 'lucide-vue-next';
+import { ArrowLeft, RefreshCw, Droplet, Thermometer, Sun, Activity, AlertCircle, Settings, X } from 'lucide-vue-next';
 import apiService from '@/services/api';
 import { useSensorDataStore } from '@/stores/module/sensorData';
 import ChartCard from '@/components/Dashboard/ChartCard.vue';
@@ -193,6 +307,8 @@ export default {
         Sun,
         Activity,
         AlertCircle,
+        Settings,
+        X,
         ChartCard
     },
     setup() {
@@ -200,14 +316,61 @@ export default {
         const sensorDataStore = useSensorDataStore();
 
         const loading = ref(false);
+        const saving = ref(false);
         const device = ref(null);
         const latestReading = ref(null);
+        const showThresholdModal = ref(false);
+
+        const thresholds = ref({
+            sampling_interval: 60,
+            alert_enabled: true,
+            ph: { min: 6.0, max: 7.5 },
+            water_temp: { min: 20, max: 28 },
+            air_temp: { min: 20, max: 35 },
+            ec: { min: 1.0, max: 2.5 },
+            light: { min: 3500, max: 6000 }
+        });
 
         const fetchDeviceDetails = async () => {
             loading.value = true;
             try {
                 const deviceResponse = await apiService.getDevice(route.params.id);
                 device.value = deviceResponse.data;
+
+                // Extract farm name from populated farm_id
+                if (device.value.farm_id) {
+                    if (typeof device.value.farm_id === 'object') {
+                        device.value.farmName = device.value.farm_id.farm_name || device.value.farm_id.name;
+                    }
+                }
+
+                // Load thresholds from device configuration
+                if (device.value.configuration) {
+                    thresholds.value = {
+                        sampling_interval: device.value.configuration.sampling_interval || 60,
+                        alert_enabled: device.value.configuration.alert_enabled !== false,
+                        ph: {
+                            min: device.value.configuration.ph_min || 6.0,
+                            max: device.value.configuration.ph_max || 7.5
+                        },
+                        water_temp: {
+                            min: device.value.configuration.water_temp_min || 20,
+                            max: device.value.configuration.water_temp_max || 28
+                        },
+                        air_temp: {
+                            min: device.value.configuration.air_temp_min || 20,
+                            max: device.value.configuration.air_temp_max || 35
+                        },
+                        ec: {
+                            min: device.value.configuration.ec_value_min || 1.0,
+                            max: device.value.configuration.ec_value_max || 2.5
+                        },
+                        light: {
+                            min: device.value.configuration.light_intensity_min || 3500,
+                            max: device.value.configuration.light_intensity_max || 6000
+                        }
+                    };
+                }
 
                 const readingResponse = await apiService.getLatestReadings(route.params.id);
                 latestReading.value = readingResponse.data;
@@ -217,6 +380,33 @@ export default {
                 console.error('Failed to fetch device details:', error);
             } finally {
                 loading.value = false;
+            }
+        };
+
+        const saveThresholds = async () => {
+            saving.value = true;
+            try {
+                await apiService.updateDeviceConfiguration(route.params.id, {
+                    sampling_interval: thresholds.value.sampling_interval,
+                    alert_enabled: thresholds.value.alert_enabled,
+                    ph_min: thresholds.value.ph.min,
+                    ph_max: thresholds.value.ph.max,
+                    water_temp_min: thresholds.value.water_temp.min,
+                    water_temp_max: thresholds.value.water_temp.max,
+                    air_temp_min: thresholds.value.air_temp.min,
+                    air_temp_max: thresholds.value.air_temp.max,
+                    ec_value_min: thresholds.value.ec.min,
+                    ec_value_max: thresholds.value.ec.max,
+                    light_intensity_min: thresholds.value.light.min,
+                    light_intensity_max: thresholds.value.light.max
+                });
+                showThresholdModal.value = false;
+                alert('Configuration saved successfully!');
+                await fetchDeviceDetails();
+            } catch (error) {
+                alert('Failed to save configuration: ' + (error.response?.data?.message || error.message));
+            } finally {
+                saving.value = false;
             }
         };
 
@@ -269,18 +459,23 @@ export default {
         });
 
         onMounted(() => {
+            // Always fetch fresh data when component mounts
             fetchDeviceDetails();
         });
 
         return {
             loading,
+            saving,
             device,
             latestReading,
+            showThresholdModal,
+            thresholds,
             phData,
             temperatureData,
             ecData,
             lightData,
-            refreshReadings
+            refreshReadings,
+            saveThresholds
         };
     }
 };
@@ -616,6 +811,142 @@ export default {
 
 .btn-primary:hover {
     background: #059669;
+}
+
+.btn-secondary {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+/* Modal Styles */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    padding: 1rem;
+}
+
+.modal {
+    background: white;
+    border-radius: 0.75rem;
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+}
+
+.close-btn:hover {
+    background: #f3f4f6;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.threshold-group {
+    margin-bottom: 1.5rem;
+}
+
+.threshold-group h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 0.75rem 0;
+}
+
+.threshold-inputs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.input-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+.input-group input {
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.input-hint {
+    font-size: 0.75rem;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.select-input {
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+    background: white;
+    cursor: pointer;
+}
+
+.select-input:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    justify-content: flex-end;
+}
+
+.modal-actions .btn {
+    padding: 0.75rem 1.5rem;
 }
 
 @media (max-width: 768px) {

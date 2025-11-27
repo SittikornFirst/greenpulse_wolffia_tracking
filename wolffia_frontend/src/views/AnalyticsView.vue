@@ -2,332 +2,197 @@
     <div class="analytics-view">
         <div class="analytics-header">
             <div>
-                <h1>Analytics & Reports</h1>
-                <p class="subtitle">Insights and trends from your IoT data</p>
+                <h1>Farm Analytics</h1>
+                <p class="subtitle">Review recent readings for a specific farm</p>
             </div>
             <div class="header-actions">
-                <select v-model="timeRange" class="time-select">
-                    <option value="24h">Last 24 Hours</option>
-                    <option value="7d">Last 7 Days</option>
-                    <option value="30d">Last 30 Days</option>
-                    <option value="90d">Last 90 Days</option>
-                </select>
-                <button @click="exportReport" class="btn btn-primary">
-                    <Download :size="20" />
-                    <span>Export Report</span>
+                <div class="farm-selector" v-if="hasFarms">
+                    <label for="analytics-farm">Farm</label>
+                    <select id="analytics-farm" v-model="selectedFarmId">
+                        <option v-for="farm in farms" :key="farm._id || farm.id" :value="farm._id || farm.id">
+                            {{ farm.farm_name || farm.name }}
+                        </option>
+                    </select>
+                </div>
+                <button @click="refreshData" :disabled="loading" class="btn btn-primary">
+                    <RefreshCw :size="18" :class="{ spin: loading }" />
+                    <span>Refresh</span>
                 </button>
             </div>
         </div>
 
-        <!-- Key Metrics -->
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-header">
-                    <TrendingUp :size="20" />
-                    <span>Average pH</span>
-                </div>
-                <div class="metric-value">{{ metrics.avgPh.toFixed(2) }}</div>
-                <!-- <div class="metric-change metric-change--up">
-                    +2.3% from last period
-                </div> -->
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <Thermometer :size="20" />
-                    <span>Avg Temperature</span>
-                </div>
-                <div class="metric-value">{{ metrics.avgTemp.toFixed(1) }}°C</div>
-                <!-- <div class="metric-change metric-change--down">
-                    -1.2% from last period
-                </div> -->
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <Sun :size="20" />
-                    <span>Avg Light</span>
-                </div>
-                <div class="metric-value">{{ Math.round(metrics.avgLight).toLocaleString() }} lux</div>
-                <!-- <div class="metric-change metric-change--up">
-                    +5.7% from last period
-                </div> -->
-            </div>
-
-            <div class="metric-card">
-                <div class="metric-header">
-                    <Activity :size="20" />
-                    <span>Avg Oxygen</span>
-                </div>
-                <div class="metric-value">{{ metrics.avgOxygen.toFixed(2) }} mS/cm</div>
-                <!-- <div class="metric-change metric-change--up">
-                    +1.5% from last period
-                </div> -->
-            </div>
+        <div v-if="!hasFarms" class="analytics-empty">
+            <MapPin :size="56" />
+            <h3>No farms yet</h3>
+            <p>Create a farm to unlock analytics.</p>
+            <router-link to="/farms" class="btn btn-primary">Create a Farm</router-link>
         </div>
 
-        <!-- Charts Grid -->
-        <div class="charts-section">
-            <div class="chart-card-full">
-                <div class="chart-header">
-                    <h2>Water Quality Trends</h2>
-                    <div class="chart-legend">
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #3b82f6;"></span>
-                            <span>pH Level</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #ef4444;"></span>
-                            <span>Temperature</span>
-                        </div>
-                        <div class="legend-item">
-                            <span class="legend-dot" style="background: #10b981;"></span>
-                            <span>Oxygen</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="chart-placeholder">
-                    <BarChart3 :size="64" />
-                    <p>Multi-line chart showing water quality trends over time</p>
-                </div>
-            </div>
-
-            <div class="charts-row">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3>Device Performance</h3>
-                    </div>
-                    <div class="chart-placeholder chart-placeholder--small">
-                        <PieChart :size="48" />
-                        <p>Device uptime and performance metrics</p>
-                    </div>
-                </div>
-
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3>Alert Distribution</h3>
-                    </div>
-                    <div class="chart-placeholder chart-placeholder--small">
-                        <BarChart3 :size="48" />
-                        <p>Alerts by priority and type</p>
-                    </div>
-                </div>
-            </div>
+        <div v-else-if="!hasDevice" class="analytics-empty">
+            <Cpu :size="48" />
+            <h3>No device found for this farm</h3>
+            <p>Add a monitoring device to start collecting analytics.</p>
+            <router-link to="/devices" class="btn btn-secondary">Register Device</router-link>
         </div>
 
-        <!-- Data Table -->
-        <div class="data-table-section">
-            <div class="table-header">
-                <h2>Detailed Readings</h2>
-                <div class="table-actions">
-                    <input v-model="searchQuery" type="text" placeholder="Search..." class="search-input" />
-                    <button @click="refreshTable" class="btn btn-secondary btn-sm">
-                        <RefreshCw :size="16" />
-                    </button>
-                </div>
-            </div>
-
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Device</th>
-                            <th>Type</th>
-                            <th>Value</th>
-                            <th>Status</th>
-                            <th>Farm</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="(reading, index) in paginatedReadings" :key="index">
-                            <td>{{ formatTimestamp(reading.timestamp) }}</td>
-                            <td>
-                                <div class="device-cell">
-                                    <component :is="getDeviceIcon(reading.type)" :size="16" />
-                                    <span>{{ reading.device }}</span>
-                                </div>
-                            </td>
-                            <td>{{ getReadingType(reading) }}</td>
-                            <td class="value-cell">{{ formatReadingValue(reading) }}</td>
-                            <td>
-                                <span :class="['status-badge', `status-badge--${getReadingStatus(reading)}`]">
-                                    {{ getReadingStatus(reading) }}
-                                </span>
-                            </td>
-                            <td>{{ reading.farm }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="table-footer">
-                <span class="results-info">
-                    Showing {{ startIndex + 1 }}-{{ endIndex }} of {{ filteredReadings.length }}
-                </span>
-                <div class="pagination-controls">
-                    <button @click="currentPage--" :disabled="currentPage === 1" class="btn btn-secondary btn-sm">
-                        Previous
-                    </button>
-                    <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
-                    <button @click="currentPage++" :disabled="currentPage === totalPages"
-                        class="btn btn-secondary btn-sm">
-                        Next
-                    </button>
-                </div>
-            </div>
+        <div v-else-if="hasDevice && tableRows.length === 0" class="analytics-empty">
+            <Activity :size="48" />
+            <h3>No data available</h3>
+            <p>This farm has no sensor data yet. Waiting for device readings...</p>
         </div>
 
-        <!-- Summary Cards -->
-        <div class="summary-section">
-            <div class="summary-card">
-                <div class="summary-header">
-                    <Clock :size="20" />
-                    <h3>System Uptime</h3>
+        <template v-else-if="hasDevice && tableRows.length > 0">
+            <div class="metrics-grid">
+                <div class="metric-card" v-for="metric in metricCards" :key="metric.label">
+                    <div class="metric-header">
+                        <component :is="metric.icon" :size="18" />
+                        <span>{{ metric.label }}</span>
+                    </div>
+                    <div class="metric-value">{{ metric.value }}</div>
+                    <p class="metric-context">{{ metric.context }}</p>
                 </div>
-                <div class="summary-value">99.7%</div>
-                <p class="summary-text">Excellent reliability over the past 30 days</p>
             </div>
 
-            <div class="summary-card">
-                <div class="summary-header">
-                    <Database :size="20" />
-                    <h3>Data Points Collected</h3>
+            <div class="data-table-section">
+                <div class="table-header">
+                    <h2>Recent Readings</h2>
+                    <span class="table-subtitle">Showing latest {{ tableRows.length }} entries</span>
                 </div>
-                <div class="summary-value">24,567</div>
-                <p class="summary-text">Across all devices and sensors</p>
-            </div>
-
-            <div class="summary-card">
-                <div class="summary-header">
-                    <AlertTriangle :size="20" />
-                    <h3>Critical Alerts</h3>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>pH</th>
+                                <th>Water Temp (°C)</th>
+                                <th>Air Temp (°C)</th>
+                                <th>EC (mS/cm)</th>
+                                <th>Light (lux)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(reading, idx) in tableRows" :key="idx">
+                                <td>{{ formatTimestamp(reading.timestamp) }}</td>
+                                <td>{{ formatValue(reading.ph?.value) }}</td>
+                                <td>{{ formatValue(reading.temperature_water_c?.value) }}</td>
+                                <td>{{ formatValue(reading.temperature_air_c?.value) }}</td>
+                                <td>{{ formatValue(reading.ec?.value) }}</td>
+                                <td>{{ formatInteger(reading.light_intensity?.value) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <div class="summary-value">3</div>
-                <p class="summary-text">2 resolved, 1 pending action</p>
             </div>
-
-            <div class="summary-card">
-                <div class="summary-header">
-                    <TrendingUp :size="20" />
-                    <h3>Growth Rate</h3>
-                </div>
-                <div class="summary-value">+15%</div>
-                <p class="summary-text">Estimated Wolffia yield improvement</p>
-            </div>
-        </div>
+        </template>
     </div>
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue';
-import {
-    Download, TrendingUp, Thermometer, Sun, Activity, BarChart3,
-    PieChart, RefreshCw, Clock, Database, AlertTriangle, Droplet, Cpu
-} from 'lucide-vue-next';
-import apiService from '@/services/api';
+import { ref, computed, onMounted, watch } from 'vue';
+import { RefreshCw, MapPin, Cpu, Droplet, Thermometer, Sun, Activity } from 'lucide-vue-next';
 import { useSensorDataStore } from '@/stores/module/sensorData';
 import { useDevicesStore } from '@/stores/module/devices';
-import { useAlertsStore } from '@/stores/module/alerts';
+import { useFarmsStore } from '@/stores/module/farms';
 
 export default {
     name: 'AnalyticsView',
     components: {
-        Download, TrendingUp, Thermometer, Sun, Activity, BarChart3,
-        PieChart, RefreshCw, Clock, Database, AlertTriangle
+        RefreshCw,
+        MapPin,
+        Cpu,
+        Droplet,
+        Thermometer,
+        Sun,
+        Activity
     },
     setup() {
         const sensorDataStore = useSensorDataStore();
         const devicesStore = useDevicesStore();
-        const alertsStore = useAlertsStore();
+        const farmsStore = useFarmsStore();
 
-        const timeRange = ref('7d');
-        const searchQuery = ref('');
-        const currentPage = ref(1);
-        const itemsPerPage = 10;
         const loading = ref(false);
-        const readings = ref([]);
-        const metrics = ref({
-            avgPh: 0,
-            avgTemp: 0,
-            avgLight: 0,
-            avgOxygen: 0
+        const tableRows = ref([]);
+        const selectedFarmId = computed({
+            get: () => farmsStore.selectedFarmId,
+            set: (value) => farmsStore.selectFarm(value)
         });
 
-        // Fetch analytics data
-        const fetchAnalytics = async () => {
+        const farms = computed(() => farmsStore.farms);
+        const hasFarms = computed(() => farms.value.length > 0);
+
+        const hasDevice = computed(() => devicesStore.devices.length > 0);
+        const activeDevice = computed(() => devicesStore.devices[0] || null);
+
+        const metricCards = computed(() => {
+            if (!tableRows.value || !tableRows.value.length) {
+                return [
+                    { label: 'Avg pH', value: '--', context: 'No data', icon: Droplet },
+                    { label: 'Avg Water Temp', value: '--', context: 'No data', icon: Thermometer },
+                    { label: 'Avg EC', value: '--', context: 'No data', icon: Activity },
+                    { label: 'Avg Light', value: '--', context: 'No data', icon: Sun }
+                ];
+            }
+
+            const avg = (key) => {
+                const values = tableRows.value
+                    .map(row => row[key]?.value)
+                    .filter(value => typeof value === 'number');
+                if (!values.length) return '--';
+                const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+                return key === 'ph'
+                    ? mean.toFixed(2)
+                    : key.includes('temperature')
+                        ? mean.toFixed(1)
+                        : Math.round(mean).toLocaleString();
+            };
+
+            return [
+                { label: 'Avg pH', value: avg('ph'), context: '24h window', icon: Droplet },
+                { label: 'Avg Water Temp', value: avg('temperature_water_c'), context: '°C', icon: Thermometer },
+                { label: 'Avg EC', value: avg('ec'), context: 'mS/cm', icon: Activity },
+                { label: 'Avg Light', value: avg('light_intensity'), context: 'lux', icon: Sun }
+            ];
+        });
+
+        const tableRowsLimited = computed(() => tableRows.value.slice(0, 25));
+
+        const refreshData = async () => {
+            if (!selectedFarmId.value) return;
             loading.value = true;
+            tableRows.value = []; // Clear existing data first
             try {
-                const response = await apiService.getDashboardSummary();
-                // Process dashboard summary data
-
-                // Fetch latest readings for all devices
-                const latestResponse = await apiService.getLatestReadings();
-                readings.value = latestResponse.data || [];
-
-                // Calculate metrics
-                if (readings.value.length > 0) {
-                    const phReadings = readings.value.filter(r => r.ph?.value);
-                    const tempReadings = readings.value.filter(r => r.temperature_water_c?.value);
-                    const lightReadings = readings.value.filter(r => r.light_intensity?.value);
-                    const oxygenReadings = readings.value.filter(r => r.ec?.value); // Using EC as oxygen proxy
-
-                    metrics.value.avgPh = phReadings.length > 0
-                        ? phReadings.reduce((sum, r) => sum + r.ph.value, 0) / phReadings.length
-                        : 0;
-                    metrics.value.avgTemp = tempReadings.length > 0
-                        ? tempReadings.reduce((sum, r) => sum + r.temperature_water_c.value, 0) / tempReadings.length
-                        : 0;
-                    metrics.value.avgLight = lightReadings.length > 0
-                        ? lightReadings.reduce((sum, r) => sum + r.light_intensity.value, 0) / lightReadings.length
-                        : 0;
-                    metrics.value.avgOxygen = oxygenReadings.length > 0
-                        ? oxygenReadings.reduce((sum, r) => sum + r.ec.value, 0) / oxygenReadings.length
-                        : 0;
+                await devicesStore.fetchDevices(selectedFarmId.value);
+                const device = devicesStore.devices[0];
+                if (!device) {
+                    tableRows.value = [];
+                    return;
                 }
+                const history = await sensorDataStore.fetchHistoricalData(device.device_id, { range: '24h', limit: 200 });
+                tableRows.value = history || [];
             } catch (error) {
-                console.error('Failed to fetch analytics:', error);
+                console.error('Failed to load analytics:', error);
+                tableRows.value = [];
             } finally {
                 loading.value = false;
             }
         };
 
-        const filteredReadings = computed(() => {
-            if (!searchQuery.value) return readings.value;
-            const query = searchQuery.value.toLowerCase();
-            return readings.value.filter(r => {
-                const device = devicesStore.deviceById(r.device_id);
-                return device?.device_name?.toLowerCase().includes(query) ||
-                    r.device_id?.toLowerCase().includes(query);
-            });
+        watch(() => farmsStore.selectedFarmId, async (val, oldVal) => {
+            if (val && val !== oldVal) {
+                await refreshData();
+            }
         });
 
-        const totalPages = computed(() =>
-            Math.ceil(filteredReadings.value.length / itemsPerPage) || 1
-        );
-
-        const startIndex = computed(() =>
-            (currentPage.value - 1) * itemsPerPage
-        );
-
-        const endIndex = computed(() =>
-            Math.min(startIndex.value + itemsPerPage, filteredReadings.value.length)
-        );
-
-        const paginatedReadings = computed(() =>
-            filteredReadings.value.slice(startIndex.value, endIndex.value)
-        );
-
-        const getDeviceIcon = (reading) => {
-            // Determine icon based on reading data
-            if (reading.ph) return Droplet;
-            if (reading.temperature_water_c) return Thermometer;
-            if (reading.light_intensity) return Sun;
-            if (reading.ec) return Activity;
-            return Cpu;
-        };
+        onMounted(async () => {
+            // Always refresh farms to ensure we have latest data
+            await farmsStore.fetchFarms();
+            if (farmsStore.selectedFarmId) {
+                await refreshData();
+            }
+        });
 
         const formatTimestamp = (timestamp) => {
+            if (!timestamp) return '--';
             return new Date(timestamp).toLocaleString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -336,73 +201,28 @@ export default {
             });
         };
 
-        const formatReadingValue = (reading) => {
-            if (reading.ph?.value) return reading.ph.value.toFixed(2);
-            if (reading.temperature_water_c?.value) return `${reading.temperature_water_c.value.toFixed(1)}°C`;
-            if (reading.light_intensity?.value) return `${reading.light_intensity.value} lux`;
-            if (reading.ec?.value) return `${reading.ec.value.toFixed(2)} mS/cm`;
-            return 'N/A';
+        const formatValue = (value) => {
+            if (value === undefined || value === null) return '--';
+            return Number(value).toFixed(2);
         };
 
-        const getReadingType = (reading) => {
-            if (reading.ph) return 'pH';
-            if (reading.temperature_water_c) return 'Temperature';
-            if (reading.light_intensity) return 'Light';
-            if (reading.ec) return 'EC';
-            return 'Unknown';
+        const formatInteger = (value) => {
+            if (value === undefined || value === null) return '--';
+            return Math.round(value).toLocaleString();
         };
-
-        const getReadingStatus = (reading) => {
-            if (reading.ph?.status) return reading.ph.status;
-            if (reading.temperature_water_c?.status) return reading.temperature_water_c.status;
-            if (reading.light_intensity?.status) return reading.light_intensity.status;
-            if (reading.ec?.status) return reading.ec.status;
-            return 'normal';
-        };
-
-        const exportReport = async () => {
-            try {
-                const response = await apiService.exportData({ timeRange: timeRange.value });
-                const blob = new Blob([response.data], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `analytics-${timeRange.value}-${Date.now()}.csv`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            } catch (error) {
-                alert('Failed to export report: ' + (error.response?.data?.message || error.message));
-            }
-        };
-
-        const refreshTable = async () => {
-            await fetchAnalytics();
-        };
-
-        onMounted(async () => {
-            await fetchAnalytics();
-            await devicesStore.fetchDevices();
-            await alertsStore.fetchAlerts();
-        });
 
         return {
-            timeRange,
-            searchQuery,
-            currentPage,
-            totalPages,
-            startIndex,
-            endIndex,
-            paginatedReadings,
-            filteredReadings,
-            metrics,
             loading,
-            getDeviceIcon,
+            farms,
+            hasFarms,
+            hasDevice,
+            selectedFarmId,
+            metricCards,
+            tableRows: tableRowsLimited,
+            refreshData,
             formatTimestamp,
-            formatReadingValue,
-            getReadingType,
-            getReadingStatus,
-            exportReport,
-            refreshTable
+            formatValue,
+            formatInteger
         };
     }
 };
@@ -436,7 +256,37 @@ export default {
 
 .header-actions {
     display: flex;
+    align-items: center;
     gap: 1rem;
+}
+
+.farm-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.farm-selector label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6b7280;
+}
+
+.farm-selector select {
+    min-width: 200px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    background: white;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.farm-selector select:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
 }
 
 .time-select {
@@ -476,6 +326,34 @@ export default {
 
 .btn-secondary:hover {
     background: #e5e7eb;
+}
+
+.analytics-empty {
+    border: 1px dashed #d1d5db;
+    border-radius: 0.75rem;
+    padding: 3rem 2rem;
+    text-align: center;
+    color: #6b7280;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    background: white;
+}
+
+.analytics-empty svg {
+    color: #d1d5db;
+}
+
+.analytics-empty h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0;
+}
+
+.analytics-empty p {
+    margin: 0;
 }
 
 .btn-sm {

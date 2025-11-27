@@ -3,8 +3,13 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import apiService from '@/services/api';
 
+const normalizeReading = (reading) => ({
+    ...reading,
+    deviceId: reading.deviceId || reading.device_id,
+    timestamp: reading.timestamp || reading.created_at
+});
+
 export const useSensorDataStore = defineStore('sensorData', () => {
-    // State
     const sensorReadings = ref({});
     const latestReadings = ref({});
     const historicalData = ref({});
@@ -12,12 +17,12 @@ export const useSensorDataStore = defineStore('sensorData', () => {
     const error = ref(null);
     const realtimeConnected = ref(false);
 
-    // Thresholds for different sensor types
     const thresholds = ref({
-        pH: { min: 6.5, max: 7.5, optimal: 7.0 },
-        temperature: { min: 20, max: 28, optimal: 24 },
-        light: { min: 3500, max: 5000, optimal: 4000 },
-        oxygen: { min: 6.0, max: 9.0, optimal: 7.5 }
+        ph: { min: 6.5, max: 7.5 },
+        water_temperature_c: { min: 20, max: 28 },
+        air_temperature_c: { min: 18, max: 35 },
+        light_intensity: { min: 3500, max: 6000 },
+        ec_value: { min: 1.0, max: 2.5 }
     });
 
     // Getters
@@ -33,16 +38,8 @@ export const useSensorDataStore = defineStore('sensorData', () => {
         const reading = latestReadings.value[deviceId];
         if (!reading) return 'unknown';
 
-        const threshold = thresholds.value[reading.type];
-        if (!threshold) return 'normal';
-
-        if (reading.value < threshold.min || reading.value > threshold.max) {
-            return 'critical';
-        }
-
-        const deviation = Math.abs(reading.value - threshold.optimal) / threshold.optimal;
-        if (deviation > 0.1) return 'warning';
-
+        if (reading?.quality_flag === 'error') return 'critical';
+        if (reading?.quality_flag === 'suspect') return 'warning';
         return 'normal';
     });
 
@@ -80,10 +77,13 @@ export const useSensorDataStore = defineStore('sensorData', () => {
             const response = await apiService.getLatestReadings(deviceId);
 
             if (deviceId) {
-                latestReadings.value[deviceId] = response.data;
+                latestReadings.value[deviceId] = normalizeReading(response.data);
             } else {
-                response.data.forEach(reading => {
-                    latestReadings.value[reading.deviceId] = reading;
+                (response.data || []).forEach(reading => {
+                    const normalized = normalizeReading(reading);
+                    if (normalized.deviceId) {
+                        latestReadings.value[normalized.deviceId] = normalized;
+                    }
                 });
             }
 
@@ -110,7 +110,7 @@ export const useSensorDataStore = defineStore('sensorData', () => {
             });
 
             const key = `${deviceId}_${range}`;
-            historicalData.value[key] = response.data;
+            historicalData.value[key] = (response.data || []).map(normalizeReading);
 
             return response.data;
         } catch (err) {
@@ -127,7 +127,7 @@ export const useSensorDataStore = defineStore('sensorData', () => {
             const response = await apiService.submitReading(reading);
 
             // Update latest readings
-            latestReadings.value[reading.deviceId] = response.data;
+            latestReadings.value[reading.deviceId] = normalizeReading(response.data);
 
             // Add to historical data if exists
             const key = `${reading.deviceId}_24h`;
@@ -149,10 +149,8 @@ export const useSensorDataStore = defineStore('sensorData', () => {
 
     function updateRealtimeReading(reading) {
         // Update latest reading
-        latestReadings.value[reading.deviceId] = {
-            ...reading,
-            timestamp: reading.timestamp || new Date().toISOString()
-        };
+        const normalized = normalizeReading({ ...reading, timestamp: reading.timestamp || new Date().toISOString() });
+        latestReadings.value[normalized.deviceId] = normalized;
 
         // Add to historical data
         const key = `${reading.deviceId}_24h`;
@@ -166,13 +164,8 @@ export const useSensorDataStore = defineStore('sensorData', () => {
         }
     }
 
-    function updateThreshold(sensorType, thresholdValues) {
-        if (thresholds.value[sensorType]) {
-            thresholds.value[sensorType] = {
-                ...thresholds.value[sensorType],
-                ...thresholdValues
-            };
-        }
+    function updateThreshold() {
+        console.warn('Global threshold editing is not supported in this release.');
     }
 
     function setRealtimeConnection(connected) {

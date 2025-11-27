@@ -2,210 +2,95 @@
     <div class="alerts-view">
         <div class="alerts-header">
             <div>
-                <h1>Alerts & Notifications</h1>
+                <h1>Alerts &amp; Notifications</h1>
                 <p class="subtitle">Monitor and manage system alerts</p>
             </div>
             <div class="header-actions">
-                <button @click="showThresholdConfig = true" class="btn btn-secondary">
-                    <Settings :size="20" />
-                    <span>Configure Thresholds</span>
-                </button>
                 <button @click="clearResolvedAlerts" class="btn btn-secondary">
                     <Trash2 :size="20" />
-          <span>Clear Resolved</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Alert Stats -->
-    <div class=" alert-stats">
-                        <div class="stat-card stat-card--danger">
-                            <div class="stat-icon">
-                                <AlertTriangle :size="32" />
-                            </div>
-                            <div class="stat-content">
-                                <p class="stat-value">{{ alertCounts.high }}</p>
-                                <p class="stat-label">High Priority</p>
-                            </div>
-                        </div>
-                        <div class="stat-card stat-card--warning">
-                            <div class="stat-icon">
-                                <AlertCircle :size="32" />
-                            </div>
-                            <div class="stat-content">
-                                <p class="stat-value">{{ alertCounts.medium }}</p>
-                                <p class="stat-label">Medium Priority</p>
-                            </div>
-                        </div>
-                        <div class="stat-card stat-card--info">
-                            <div class="stat-icon">
-                                <Info :size="32" />
-                            </div>
-                            <div class="stat-content">
-                                <p class="stat-value">{{ alertCounts.low }}</p>
-                                <p class="stat-label">Low Priority</p>
-                            </div>
-                        </div>
-                        <div class="stat-card stat-card--success">
-                            <div class="stat-icon">
-                                <CheckCircle :size="32" />
-                            </div>
-                            <div class="stat-content">
-                                <p class="stat-value">{{ resolvedCount }}</p>
-                                <p class="stat-label">Resolved Today</p>
-                            </div>
-                        </div>
-            </div>
-
-            <!-- Filters -->
-            <div class="filters">
-                <div class="filter-tabs">
-                    <button v-for="tab in tabs" :key="tab.value" @click="activeTab = tab.value"
-                        :class="['tab', { 'tab--active': activeTab === tab.value }]">
-                        {{ tab.label }}
-                        <span v-if="tab.count" class="tab-badge">{{ tab.count }}</span>
-                    </button>
-                </div>
-
-                <div class="filter-controls">
-                    <select v-model="filterPriority" class="filter-select">
-                        <option value="">All Priorities</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select>
-                    <select v-model="filterDevice" class="filter-select">
-                        <option value="">All Devices</option>
-                        <option v-for="device in devices" :key="device.id" :value="device.id">
-                            {{ device.name }}
-                        </option>
-                    </select>
-                    <select v-model="sortBy" class="filter-select">
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="priority">Priority</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Loading State -->
-            <div v-if="loading" class="loading-state">
-                <div class="spinner"></div>
-                <p>Loading alerts...</p>
-            </div>
-
-            <!-- Empty State -->
-            <div v-else-if="filteredAlerts.length === 0" class="empty-state">
-                <CheckCircle :size="64" />
-                <h3>{{ activeTab === 'all' ? 'No alerts found' : 'No ' + activeTab + ' alerts' }}</h3>
-                <p>{{ activeTab === 'resolved' ? 'Great! You have resolved all alerts.' : 'All systems are operating normally.' }}</p>
-            </div>
-
-            <!-- Alerts List -->
-            <div v-else class="alerts-list">
-                <AlertItem v-for="alert in filteredAlerts" :key="alert.id" :alert="alert" :show-details="true"
-                    :allow-delete="activeTab === 'resolved'" @resolve="handleResolveAlert" @delete="handleDeleteAlert"
-                    @view-details="handleViewDetails" />
-            </div>
-
-            <!-- Pagination -->
-            <div v-if="filteredAlerts.length > 0" class="pagination">
-                <button @click="currentPage--" :disabled="currentPage === 1" class="btn btn-secondary btn-sm">
-                    Previous
+                    <span>Clear Resolved</span>
                 </button>
-                <span class="pagination-info">
-                    Page {{ currentPage }} of {{ totalPages }}
-                </span>
-                <button @click="currentPage++" :disabled="currentPage === totalPages" class="btn btn-secondary btn-sm">
-                    Next
+            </div>
+        </div>
+
+        <!-- Alert Stats -->
+        <div class="alert-stats">
+            <div class="stat-card stat-card--info">
+                <div class="stat-icon">
+                    <Info :size="32" />
+                </div>
+                <div class="stat-content">
+                    <p class="stat-value">{{ alertCounts.high }}</p>
+                    <p class="stat-label">Unsolved issues</p>
+                </div>
+            </div>
+            <div class="stat-card stat-card--success">
+                <div class="stat-icon">
+                    <CheckCircle :size="32" />
+                </div>
+                <div class="stat-content">
+                    <p class="stat-value">{{ resolvedCount }}</p>
+                    <p class="stat-label">Resolved Today</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <div class="filter-tabs">
+                <button v-for="tab in tabs" :key="tab.value" @click="activeTab = tab.value"
+                    :class="['tab', { 'tab--active': activeTab === tab.value }]">
+                    {{ tab.label }}
+                    <span v-if="tab.count" class="tab-badge">{{ tab.count }}</span>
                 </button>
             </div>
 
-            <!-- Threshold Configuration Modal -->
-            <div v-if="showThresholdConfig" class="modal-overlay" @click="showThresholdConfig = false">
-                <div class="modal" @click.stop>
-                    <div class="modal-header">
-                        <h2>Configure Alert Thresholds</h2>
-                        <button @click="showThresholdConfig = false" class="close-btn">
-                            <X :size="20" />
-                        </button>
-                    </div>
-                    <div class="modal-body">
-                        <form @submit.prevent="saveThresholds">
-                            <div class="threshold-group">
-                                <h3>
-                                    <Droplet :size="20" /> pH Levels</h3>
-              <div class=" threshold-inputs">
-                                        <div class="input-group">
-                                            <label>Minimum</label>
-                                            <input v-model.number="thresholds.pH.min" type="number" step="0.1" />
-                                        </div>
-                                        <div class="input-group">
-                                            <label>Maximum</label>
-                                            <input v-model.number="thresholds.pH.max" type="number" step="0.1" />
-                                        </div>
-                            </div>
-                    </div>
-
-                    <div class="threshold-group">
-                        <h3>
-                            <Thermometer :size="20" /> Temperature (°C)
-                        </h3>
-                        <div class="threshold-inputs">
-                            <div class="input-group">
-                                <label>Minimum</label>
-                                <input v-model.number="thresholds.temperature.min" type="number" step="0.1" />
-                            </div>
-                            <div class="input-group">
-                                <label>Maximum</label>
-                                <input v-model.number="thresholds.temperature.max" type="number" step="0.1" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="threshold-group">
-                        <h3>
-                            <Sun :size="20" /> Light Intensity (lux)
-                        </h3>
-                        <div class="threshold-inputs">
-                            <div class="input-group">
-                                <label>Minimum</label>
-                                <input v-model.number="thresholds.light.min" type="number" step="100" />
-                            </div>
-                            <div class="input-group">
-                                <label>Maximum</label>
-                                <input v-model.number="thresholds.light.max" type="number" step="100" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="threshold-group">
-                        <h3>
-                            <Activity :size="20" /> Dissolved Oxygen (mg/L)
-                        </h3>
-                        <div class="threshold-inputs">
-                            <div class="input-group">
-                                <label>Minimum</label>
-                                <input v-model.number="thresholds.oxygen.min" type="number" step="0.1" />
-                            </div>
-                            <div class="input-group">
-                                <label>Maximum</label>
-                                <input v-model.number="thresholds.oxygen.max" type="number" step="0.1" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="button" @click="showThresholdConfig = false" class="btn btn-secondary">
-                            Cancel
-                        </button>
-                        <button type="submit" class="btn btn-primary">
-                            Save Thresholds
-                        </button>
-                    </div>
-                    </form>
-                </div>
+            <div class="filter-controls">
+                <select v-model="filterDevice" class="filter-select">
+                    <option value="">All Devices</option>
+                    <option v-for="device in devices" :key="device.id" :value="device.id">
+                        {{ device.name }}
+                    </option>
+                </select>
+                <select v-model="sortBy" class="filter-select">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="priority">Priority</option>
+                </select>
             </div>
+        </div>
+
+        <!-- Loading State -->
+        <div v-if="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading alerts...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div v-else-if="filteredAlerts.length === 0" class="empty-state">
+            <CheckCircle :size="64" />
+            <h3>{{ activeTab === 'all' ? 'No alerts found' : 'No ' + activeTab + ' alerts' }}</h3>
+            <p>{{ activeTab === 'resolved' ? 'Great! You have resolved all alerts.' : 'All systems are operating normally.' }}</p>
+        </div>
+
+        <!-- Alerts List -->
+        <div v-else class="alerts-list">
+            <AlertItem v-for="alert in filteredAlerts" :key="alert.id" :alert="alert" :show-details="true"
+                :allow-delete="activeTab === 'resolved'" @resolve="handleResolveAlert" @delete="handleDeleteAlert"
+                @view-details="handleViewDetails" />
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="filteredAlerts.length > 0" class="pagination">
+            <button @click="currentPage--" :disabled="currentPage === 1" class="btn btn-secondary btn-sm">
+                Previous
+            </button>
+            <span class="pagination-info">
+                Page {{ currentPage }} of {{ totalPages }}
+            </span>
+            <button @click="currentPage++" :disabled="currentPage === totalPages" class="btn btn-secondary btn-sm">
+                Next
+            </button>
         </div>
     </div>
 </template>
@@ -214,19 +99,16 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
-    AlertTriangle, AlertCircle, Info, CheckCircle, Settings, Trash2, X,
-    Droplet, Thermometer, Sun, Activity
+    AlertTriangle, AlertCircle, Info, CheckCircle, Trash2
 } from 'lucide-vue-next';
 import { useAlertsStore } from '@/stores/module/alerts';
 import { useDevicesStore } from '@/stores/module/devices';
-import { useSensorDataStore } from '@/stores/module/sensorData';
 import AlertItem from '@/components/Alerts/AlertItem.vue';
 
 export default {
     name: 'AlertsView',
     components: {
-        AlertTriangle, AlertCircle, Info, CheckCircle, Settings, Trash2, X,
-        Droplet, Thermometer, Sun, Activity,
+        AlertTriangle, AlertCircle, Info, CheckCircle, Trash2,
         AlertItem
     },
     setup() {
@@ -234,7 +116,6 @@ export default {
         const route = useRoute();
         const alertsStore = useAlertsStore();
         const devicesStore = useDevicesStore();
-        const sensorDataStore = useSensorDataStore();
 
         const loading = ref(false);
         const activeTab = ref('unresolved');
@@ -243,14 +124,6 @@ export default {
         const sortBy = ref('newest');
         const currentPage = ref(1);
         const itemsPerPage = 10;
-        const showThresholdConfig = ref(false);
-
-        const thresholds = ref({
-            pH: { min: 6.5, max: 7.5 },
-            temperature: { min: 20, max: 28 },
-            light: { min: 3500, max: 5000 },
-            oxygen: { min: 6.0, max: 9.0 }
-        });
 
         const devices = computed(() => devicesStore.devices);
         const alertCounts = computed(() => alertsStore.alertCounts);
@@ -340,14 +213,6 @@ export default {
             }
         };
 
-        const saveThresholds = () => {
-            Object.keys(thresholds.value).forEach(type => {
-                sensorDataStore.updateThreshold(type, thresholds.value[type]);
-            });
-            showThresholdConfig.value = false;
-            alert('Thresholds updated successfully!');
-        };
-
         onMounted(async () => {
             loading.value = true;
             try {
@@ -355,13 +220,6 @@ export default {
                     alertsStore.fetchAlerts(),
                     devicesStore.fetchDevices()
                 ]);
-
-                // Load thresholds
-                Object.keys(sensorDataStore.thresholds).forEach(type => {
-                    if (thresholds.value[type]) {
-                        thresholds.value[type] = sensorDataStore.thresholds[type];
-                    }
-                });
 
                 // Check for highlight query param
                 if (route.query.highlight) {
@@ -388,8 +246,6 @@ export default {
             sortBy,
             currentPage,
             totalPages,
-            showThresholdConfig,
-            thresholds,
             devices,
             alertCounts,
             resolvedCount,
@@ -398,8 +254,7 @@ export default {
             handleResolveAlert,
             handleDeleteAlert,
             handleViewDetails,
-            clearResolvedAlerts,
-            saveThresholds
+            clearResolvedAlerts
         };
     }
 };
