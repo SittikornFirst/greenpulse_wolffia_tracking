@@ -1,0 +1,13 @@
+{
+  "name": "mock-sensor",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mock IoT sensor device for testing",
+  "main": "mock-sensor.js",
+  "scripts": {
+    "start": "node mock-sensor.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}

@@ -49,8 +49,8 @@ export function useWebSocket() {
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('New Alert', {
                 body: alert.message,
-                icon: '/logo.png',
-                badge: '/badge.png'
+                // icon: '/logo.png',
+                // badge: '/badge.png'
             });
         }
 

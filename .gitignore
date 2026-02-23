@@ -38,3 +38,4 @@ coverage
 __screenshots__/
 
 package-lock.json
+*.package-lock.json

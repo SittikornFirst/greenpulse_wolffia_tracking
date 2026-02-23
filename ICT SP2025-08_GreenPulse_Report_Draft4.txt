@@ -1,0 +1,756 @@
+GREENPULSE: IOT-BASED SYSTEM FOR TRACKING ENVIRONMENTAL FACTORS IN WOLFFIA CULTIVATION
+��չ�����: �к� IOT ����Ѻ��õԴ����Ѩ��´�ҹ����Ǵ����          㹡��������
+
+
+
+
+BY
+MR.	KASAMA			KIATAPAKUL	6588045
+MISS	NAPASSAWAN		SONJATE		6588098
+MR.	SITTIKORN		MANEEWONG	6588182
+
+
+
+
+ADVISOR
+ASST. PROF. DR.�DOLVARA GUNATILAKA
+
+
+
+
+A Senior Project Submitted in Partial Fulfillment of
+the Requirements for
+
+THE DEGREE OF BACHELOR OF SCIENCE
+(INFORMATION AND COMMUNICATION TECHNOLOGY)
+
+Faculty of Information and Communication Technology
+Mahidol University
+2025
+
+
+COPYRIGHT OF MAHIDOL UNIVERSITY
+
+ACKNOWLEDGEMENTS
+      We would like to express our sincere appreciation to everyone who contributed to the successful development of the IoT-based Water Quality and Environment Monitoring System for Wolffia Farming. Our gratitude goes to the Faculty of Information and Communication Technology, Mahidol University, Thailand, for continuous support, essential resources, and an encouraging academic environment. This project was made possible through the invaluable mentorship and guidance of Asst. Prof. Dr. Dolvara Gunatilaka, whose insight and dedication greatly shaped the quality and direction of our work.
+      We are also grateful to the laboratory staff and collaborating growers/greenhouse operators who shared practical knowledge and facilitated testing, which significantly strengthened the real-world relevance of this system. Finally, we extend heartfelt thanks to our families and friends for their patience, encouragement, and steady support throughout this journey.
+      Lastly, we would like to recognize our project team Kasama Kiatapakul, Napassawan Sonjate, Sittikorn Maneewong for their commitment, collaborative spirit, and hard work. This project reflects our collective effort and shared goal to advance smart aquaculture through real-time IoT monitoring.
+
+
+Mr. Kasama Kiatapakul
+Miss Napassawan Sonjate
+Mr. Sittikorn Maneewong
+GREENPULSE: IOT-BASED SYSTEM FOR TRACKING ENVIRONMENTAL FACTORS IN WOLFFIA CULTIVATION
+
+MR.	KASAMA		KIATAPAKUL	6588045 	ITCS/B
+MISS	NAPASSAWAN	SONJATE		6588098	ITCS/B
+MR. 	SITTIKORN		MANEEWONG	6588182	ITCS/B
+
+B.Sc. (INFORMATION AND COMMUNICATION TECHNOLOGY)
+
+PROJECT ADVISOR: ASST. PROF. DR. DOLVARA GUNATILAKA
+
+ABSTRACT
+      <Abstract content as sentence case here>
+      
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+KEYWORDS : WOLFFIA / WATER QUALITY 
+48 P.
+
+CONTENTS
+Page
+ACKNOWLEDGEMENTS	ii
+ABSTRACT	iii
+
+1 	INTRODUCTION	5
+1.1	PROBLEM STATEMENT	5
+1.2	OBJECTIVES OF THE PROJECT	6
+1.3	SCOPE OF THE PROJECT	6
+1.4	EXPECTED BENEFITS	7
+1.5	METHODOLOGY OVERVIEW	8
+2 	BACKGROUND	10
+2.1	OVERVIEW OF WOLFFIA GLOBOSA	10
+2.2	ENVIRONMENTAL AND NUTRITIONAL FACTORS	10
+3 	RELATED WORKS	14
+4 	METHODOLOGY	21
+4.1	SYSTEM ARCHITECTURE	21
+4.2	FUNCTIONAL DECOMPOSITION DIAGRAM (FDD)	25
+4.3	DATABASE	33
+4.4	UX/UI DESIGN	40
+5 	EVALUATION AND RESULTS	48
+6 	CONCLUSION AND FUTURE WORK	49
+REFERENCES	50
+AI USAGE ACKNOWLEDGMENT STATEMENT	51
+APPENDIX A	52
+
+CHAPTER 1
+INTRODUCTION
+      This chapter introduces the problem statements, the objectives, the scope, the benefits of this project, and the methodology overview.
+1.1 Problem Statement
+      Wolffia globosa is a highly nutritious aquatic plant with increasing demand both domestically and internationally. However, cultivating Wolffia globosa is challenging due to its specific water quality and environmental control. Many factors influence growth, including pH, temperature, light intensity, nutrient content in water, dissolved oxygen, plant density, and salinity. If these factors are not optimal, the plant can easily slow down, stop growing, or lose its yield. This complex management requires knowledge, experience, and continuous care.�
+      Currently, most farmers still rely on manual water quality measurements, which have several limitations. For example, measurements require a longer time, typically   15 - 20 minutes per measurement, and are typically performed only once or twice a day. This is insufficient to monitor the changes in pH, temperature, and light intensity that can occur continuously over 24 hours. Furthermore, the lack of immediate alerts for abnormalities causes delays in corrective action. These constraints ultimately make Wolffia globosa cultivation complex and demanding of both time and specialized experience.
+      To overcome current limitations, this project will develop an integrated Internet of Things (IoT) monitoring system for Wolffia globosa cultivation. The system continuously measures key water quality and environmental parameters and transmits real-time data to farmers, allowing them to improve water conditions quickly. By providing accurate and timely data, this system aims to increase yield quality, reduce the risk of loss, and improve the efficiency of Wolffia globosa cultivation.
+1.2 Objectives of the Project
+      To design and develop �GreenPulse�, an IoT-based water quality and environment monitoring system for Wolffia globosa farming, integrating the following key components:
+* IoT Embedded System: Offer continuous monitoring of critical water quality and environmental parameters essential for Wolffia globosa growth.�
+* Web Application Dashboards: Provide user interfaces for real-time data visualization, historical trend analysis, instant actionable alerts.
+1.3 Scope of the Project
+      The scope of the project includes the following:
+* Target User Groups
+o Wolffia globosa Farmers: Small to medium-scale farmers who seek to improve productivity and reduce crop losses by monitoring water quality and environmental factors in real-time.�
+o Agricultural Researchers: Institutions and researchers studying aquatic plants that require continuous data on water quality for experimentation and optimization.
+o Food Industry Partners: Companies sourcing Wolffia globosa as a food ingredient that want traceable, high-quality, and safe production practices.�
+* Main Features
+o IoT Sensor Module: Continuous measurement of key parameters including water pH, EC (Electrical Conductivity), air temperature, water temperature and light intensity, with proper calibration and compensation.�[NS1]
+o Real-time Data Transmission: Sensor data transmitted to a back-end system for storage and processing.
+o Web Application: A user-friendly interface that allows farmers to view water quality status, environmental factors, and historical trends, and receive actionable recommendations.
+o Alerts and Notifications: Threshold-based alerts (Such as abnormal pH, high temperature) are displayed on a web-based dashboard to enable timely corrective actions.
+* System Constraints
+o Sensor Accuracy and Calibration: The system relies on the accuracy of sensors. Regular calibration and maintenance are required to ensure reliable and accurate reading.
+o Sensor connectivity: The system requires a stable internet or mobile network connection to synchronize real-time data with the cloud-based back-end system.
+o Environmental Durability: Outdoor use requires a weatherproof enclosure and proper waterproofing to prevent corrosion and water damage.
+o Power Supply: IoT devices require battery power, so efficient power management is required to ensure continuous operation in outdoor environments.�
+1.4 Expected Benefits
+* Improving agricultural production efficiency: Continuously controlling water quality and environmental factors helps to maintain the continuous growth of the Wolffia globosa and ensure efficient production.
+* Rapid problem detection: Real-time alerts help farmers quickly detect improper water conditions, reducing the risk of crop loss.
+* Collect data for analysis: Collecting and displaying historical data allows farmers and researchers to analyze trends to improve farming strategies and long-term results. 
+1.5 Methodology Overview
+
+Figure 1.5 System Development and Implementation overview[NS2]
+      Figure 1.5 presents an overview of our methodology. The [NS3]GreenPulse project development follows a systematic, sequential approach that integrates requirements gathering, system design, hardware implementation, software development, system testing, and field deployment. Beginning with requirement gathering and literature review in phase 1, the team established project foundations by analyzing existing Wolffia globosa cultivation practices and reviewing related IoT systems. This phase informed the overall system design direction. Phase 2 involves system design, which separates the project into two interconnected tracks: designing the embedded system for IoT embedded system and the web-based dashboard system for data processing and visualization.?
+      Phase 3 separates into two parallel implementation streams. Track 3.1 focuses on developing the backend and storage infrastructure, including API development, database design, and analytics/alert systems. Simultaneously, track 3.2 addresses hardware prototype implementation and sensor setup, establishing the physical foundation for environmental monitoring. These implementations converge into phase 3.3, where embedded software is developed for the ESP32 microcontroller, enabling sensor data collection, local logging, and MQTT communication.?
+
+
+
+      Phase 4 involves comprehensive sensor calibration to ensure accurate and reliable environmental parameter measurements. Once individual components are calibrated, phase 5 proceeds with system integration and testing, where embedded software, backend services, and web interface are unified and tested for proper data flow from sensors through cloud processing to user dashboards. This comprehensive testing validates that all system components communicate correctly and that alerts trigger appropriately when environmental parameters exceed defined thresholds.?
+      Finally, phase 6 consists of field pilot and validation, where the complete GreenPulse system is deployed at an actual Wolffia globosa cultivation site. Real-world testing at an operational farm validates system performance, user interface usability, and the practical effectiveness of environmental monitoring for Wolffia globosa growth maintenance. This field validation phase ensures the system meets farmer requirements and generates measurable improvements in cultivation efficiency before broader deployment.?
+      
+
+CHAPTER 2
+BACKGROUND
+      This chapter provides an overview of Wolffia farming, the environmental and nutritional factors influencing its growth, the water quality and environmental parameters and thresholds that must be controlled, as well as common problems, pond management, and challenges observed in practice. 
+ 
+2.1 Overview of Wolffia globosa
+      Wolffia spp., belonging to the family Lemnaceae, commonly known as duckweed, is widely recognized for its high nutritional value, particularly protein, essential amino acids, and vitamins, making it a promising sustainable food source. Due to its rapid growth and adaptability, among the Wolffia species, Wolffia globosa is a prominent and widely recognized species and has become an emerging agricultural product in Thailand and other Southeast Asian countries. However, maintaining consistent yield and quality requires effective management of environmental conditions, particularly water quality, which plays a central role in Wolffia globosa cultivation [1].
+2.2 Environmental and Nutritional Factors
+      The information presented in this chapter is partly based on field data and observations collected during a site visit to ��ҹ��� by Thai Wolffia (Thai Wolffia globosa farm), a Wolffia globosa cultivation site in Thailand.
+* Water Quality: Water is the most critical factor in Wolffia globosa farming. Poor water quality directly affects taste, smell, and overall product quality. The key parameters include:
+o pH: Optimal growth occurs between 6.2 and 7.5, with the best range being 6.6 - 6.8. Values below 6.2 cause water to turn green and degrade quickly, while values above 7.5 promote algae growth.
+o Temperature: Wolffia globosa grows best when water temperature is maintained between 25 - 27?C, while ambient temperatures outside greenhouses may reach up to 35?C.
+o Electrical [NS4]Conductivity (EC): EC measures the water's ability to conduct electrical current, which directly reflects the concentration of dissolved mineral ions and nutrients. Lower EC indicates insufficient minerals and nutrients, while higher EC suggests excess salt accumulation. Maintaining balanced EC around 500 - 1500 ?S/cm to ensures proper nutrient availability for optimal Wolffia growth.
+o Water treatment: Reverse Osmosis (RO) and Ultraviolet (UV) filtration are commonly used to reduce contamination and extend pond water lifespan. Recent practices also suggest using koi pond�style recirculating water systems, which can extend water usability from 1.5 months up to 3 months.
+* Air and Climate:
+o Humidity [NS5]in the cultivation house: Humidity significantly affects the quality and growth rate of Wolffia. Moderate humidity levels (typically 60 - 80% relative humidity) are favorable for optimal plant growth. Excessively high humidity can promote fungal diseases and pathogenic growth, while very low humidity can stress the plants and slow growth rates. The ideal humidity range supports photosynthesis efficiency and prevents moisture-related complications.
+o Air circulation: Gentle airflow is required to prevent stagnant water, which could lead to water deterioration.
+
+
+o Weather [NS6]conditions: In general, cool weather is favorable for Wolffia globosa formation, but a new theory suggests that hot and humid conditions can also stimulate its growth. However, fluctuations in weather such as alternating rain and sunshine or overcast skies cause changes in humidity and temperature, which present significant challenges.
+o Light intensity: Optimal range are around 10,000 � 12,000 lux to produces the maximum marginal yield.
+* Minerals and nutrients: The supplementation of water-soluble NPK fertilizers (16 - 16 - 16 or 20 - 20 - 20) represents the primary method for ensuring adequate nutrient availability to support the growth of Wolffia globosa. Furthermore, Wolffia globosa demonstrates a greater demand for carbon in comparison to oxygen.
+* Pests
+o Algae: Algae compete with Wolffia globosa for the same nutrients, and excessive algal growth can accumulate as sediment, thereby deteriorating water quality.
+o Decayed Wolffia globosa: The presence of even a single decayed Wolffia globosa plant can spread rapidly throughout the pond. Consequently, farmers must regularly monitor and promptly remove any decayed individuals to prevent large-scale contamination.
+      Table 2.3 presents the key parameters affecting Wolffia globosa growth, including pH, temperature, and electrical conductivity (EC), along with the optimal and threshold ranges. These guidelines serve as the basis for developing an IoT system for continuous monitoring and controlling Wolffia globosa cultivation conditions.
+
+
+Table 2.3 presents the optimal and threshold ranges of key water quality and environmental parameters
+Factor
+Optimal Range
+Below Range
+Above Range
+pH
+6.2 - 7.5
+Green water, fast spoilage
+Algae attach to Wolffia globosa
+EC (?S/cm)
+500 - 1500
+Nutrient deficiency
+Salt accumulation
+Water Temperature (?C)
+25 - 27
+Slow growth
+Risk of spoilage
+Air Temperature (?C)
+~ 35
+Slow growth
+Heat and wilting
+Light Intensity (Lux)
+5,000 - 10,000
+Slow growth, Decrease photosynthetic efficiency
+pale leaf color, reduced yield, and slower growth rate.
+     
+
+CHAPTER 3
+RELATED WORKS
+      This chapter provides an overview of related research including aquatic plant cultivation, the importance of water quality, and IoT-based environmental monitoring technologies that support sustainable farming.
+ 
+3.1 IoT-Enabled Premium Wolffia Farming in Thailand (NSTDA @ Pro-T Farm, 2025)
+      Researchers from Thailand�s NSTDA, through NECTEC and BIOTEC, in partnership with the Thai Aquaculture Federation, developed an IoT-based smart farming system for cultivating Wolffia globosa at Pro-t Farm in Chonburi. The system integrates NECTEC�s HandySense sensors with BIOTEC�s plant growth expertise to monitor and control key factors such as light, temperature, pH, and nutrients, producing high protein yields every seven days. Data are accessible via smartphone for real-time management, while post-harvest innovations like nano-bubble cleaning and freeze-drying ensure product safety and quality. The project also applies AI and big data to optimize production and supports farmers in producing standardized, premium-grade Wolffia that meets COA, GMP, and Halal standards for broader market potential. [2][DG7]
+3.2 Design of a smart hydroponics monitoring system using an ESP32 microcontroller and the Internet of Things (MethodsX Volume 11, December 2023)
+      The system measures key parameters such as temperature, water level, pH, and nutrient levels (TDS) using various sensors. The ESP32 processes this data and can automatically control pumps to adjust water, nutrients, or salt levels as needed. Users can monitor and manually control the system through the Blynk smartphone app. The system was successfully implemented and tested, showing effective automation and remote monitoring for hydroponic plant growth. [3] 
+          
+      Figure 3.2 presents the Design of a smart hydroponics monitoring system using an ESP32 microcontroller and IoT technology.[NS8][NS9]
+
+      Figure 3.2 Design of a smart hydroponics monitoring system[DG10]
+3.3 Aquaponics Monitoring System Research (1st KEC Conference on Engineering and Technology, September 2018)
+      Researchers from Kathford International College of Engineering & Management, part of Tribhuvan University, developed a prototype for an IoT-based aquaponics monitoring system. It combined a Raspberry Pi 3 B+ with an Arduino Nano to create a real-time monitoring solution intended to support the favorable growth of both fish and plants. The system's sensors monitor pH, water temperature, humidity, and water level, while a relay is used for light control. An LCD provides on-site data display, and a web server allows for remote access to information in both graphical and JSON formats, with the system generating warning messages on both displays if parameters deviate from a predefined range. The research concludes that the system is much more efficient and effective than traditional methods and that remarkable outcomes could become visible, though no quantitative data on yield, growth rates, or resource savings were reported. The project successfully demonstrates the feasibility of using a microcomputer-based IoT system to monitor an aquaponics environment and make data accessible remotely via the web. [4]
+3.4 An IoT-Based Hydroponic Monitoring and Control System for Sustainable Food Production (Journal of Digital Food Energy & Water Systems, December 2023)
+      Researchers from the University of Lagos and the University of Johannesburg developed a prototype of an IoT-based hydroponic monitoring and control system designed as a technologically advanced solution for sustainable food production. The system combines a Raspberry Pi 3 microcontroller with a suite of sensors and a cloud backend to automate and remotely manage the growing environment. The integrated sensors monitor key environmental parameters including ambient temperature and humidity (DHT11), pH level of the nutrient solution (SEN1061), Total Dissolved Solids (DF Robot SEN0244) as a proxy for nutrient concentration, and ambient light intensity. Data is transmitted in real-time to a dedicated web server on Amazon Web Services (AWS) and a custom Android mobile application, which allows users to remotely monitor the system and as designed, control elements for regulating water levels, temperature, humidity, pH, and light usage. The research validated the sensor network's efficiency in accurately transmitting data, with future plans to incorporate CO2 sensors, highlighting the project's aim to reduce human intervention and enhance global food security through smart farming. [5]
+
+
+3.5 Smart aquaponic system based Internet of Things (Journal of Physics Conference Series, April 2019)
+      Researchers from the Electrical Engineering Department at Trunojoyo University, Indonesia, developed a smart aquaponics system based on the Internet of Things (IoT) designed to make the farming practice easier and more efficient. The system integrated a NodeMCU microcontroller with a suite of sensors to automatically control and monitor the aquaponic environment. The sensors cover water level, pH with a target range of 7 - 7.5, and water temperature with a target range of 20 - 30?C. Data is transmitted to the Ubidots IoT Cloud server and is accessible in real-time via a web dashboard, a local display, and an Android mobile application. The system's automated functions include a fish feeder set to dispense food three times a day, and it incorporates resilience features like a backup water supply and an emergency power source, emphasizing the development of a bio-integrated farming system that reduces the need for frequent manual observation by farmers [6].
+      Table 3.1 compares five IoT-based farming systems by examining their core principles, the IoT components used, the parameters each system measures, and the key outcomes achieved. It provides a clear overview of how different projects apply IoT technology to monitor environmental conditions, automate processes, and improve farming efficiency.
+      
+Table 3.1 Comparison of IoT-Based Smart Farming and Hydroponics Systems[DG11]
+Paper
+Core Principle (Idea)
+IoT Components Used
+Target organism
+Measured Parameter
+Key Findings (Outcome)
+IoT-Enabled Premium Wolffia Farming in Thailand [2]
+
+
+
+
+
+An IoT-based smart farming system to produce high-protein Wolffia globosa. This technology standardizes traditional agriculture. This strategy elevates a common crop into a reliable, high-value product, creating new and stable economic opportunities.
+HandySense (ESP32 Microcontroller) and sensors aren�t specified in the article.
+* Wolffia 
+* Dissolved Oxygen (DO) in water
+* Air temperature
+* Humidity
+* Carbon dioxide (CO2) levels
+* Electrical Conductivity (EC)
+* pH level
+* Water temperature�
+* Light intensity
+* Nitrate content
+A high-tech farming system for Wolffia globosa using IoT sensors (HandySense) to guarantee a consistent harvest every 7 days. This specific outcome proves that the core principle can be effectively implemented.
+Design of a smart hydroponics monitoring system using an ESP32 microcontroller and the Internet of Things [3]
+The project automates a hydroponics system using an ESP32 microcontroller and sensors to manage water, pH, and nutrient levels, allowing for remote smartphone control via the Blynk IoT app.
+* ESP32 Microcontroller
+* Total Dissolved Solids (TDS) sensor
+* pH sensor
+* Water level sensor
+* Temperature sensor
+* Lettuce
+* Total Dissolved Solids (TDS)
+* pH level
+* Water level
+* Temperature
+The system was successfully built and proven to automatically maintain a stable environment, demonstrating an effective, low-cost method to boost crop productivity and prevent loss.
+Aquaponics Monitoring System Research [4]
+The core principle is to integrate IoT technology into an aquaponics system using Raspberry Pi and sensors to remotely monitor and display key environmental parameters like pH, temperature, and water level in real-time.
+* Raspberry Pi 3 microcomputer
+* Arduino Nano microcontroller
+* pH sensor 
+* (E-201-C)
+* Ultrasonic sensor (HCSR04)
+* Temperature & Humidity sensor (DHT11)
+* Tomato
+* Coriander
+* Koi-Carp fishes
+
+* pH level
+* Temperature
+* Humidity
+* Water level
+The implemented system successfully maintained environmental parameters within their optimal ranges. It also transmitted and displayed this sensor data on a remote web portal in both graphical and JSON formats.
+An IoT-Based Hydroponic Monitoring and Control System for Sustainable Food Production [5]
+This article presents an IoT-based hydroponic system using a Raspberry Pi and sensors to monitor and automate plant growth conditions like pH and temperature. The system transmits data to the AWS cloud and a mobile app, allowing for remote control to optimize growth and address the issue of declining soil fertility.
+* Raspberry Pi 3 microcomputer
+* Temperature & Humidity sensor (DHT11)
+* pH sensor (SEN1061)
+* Total Dissolved Solids (TDS) Sensor (DF Robot SEN0244)
+* Light Intensity Sensor (Adafruit VEML77)
+* Water Level Sensor
+* Not specified, but the paper does refer to related studies on lettuce and corn.
+* Temperature
+* Humidity
+* pH level
+* Total Dissolved Solids (TDS)
+* Light intensity
+* Water level
+Experiments validated the system's design, confirming that its sensors for temperature, pH, and humidity provided accurate data. The integrated system successfully transmitted this data to the AWS cloud, automatically controlled hardware like pumps and lights, and sent notifications to a mobile application as intended. 
+Smart aquaponic system based Internet of Things [6]
+The research aims to solve the problem of shrinking farmland by creating a smart aquaponics system using the Internet of Things (IoT). This system automates and allows for remote mobile monitoring of water conditions and fish feeding, making the combined farming process more efficient.
+* NodeMCU microcontroller
+* Ultrasonic sensor
+* pH sensor
+* Water temperature sensor
+
+* Tilapia (fishes)
+* Lettuce
+* pH level
+* Water
+* temperature
+The system's sensors were highly accurate, with success rates over 92% for pH, temperature, and water level monitoring. The fish grew well, but the lettuce plants' growth was stunted due to high temperatures and unsuitable water pH.
+      
+      
+           
+CHAPTER 4
+METHODOLOGY
+ 
+ 
+ 
+ 
+4.1 System Architecture
+
+Figure 4.1 System Architecture
+      Figure 4.1 presents the system architecture of the IoT-based Water Quality and Environment Monitoring System, which monitors and analyzes real-time environmental parameters essential for Wolffia globosa cultivation.
+      The proposed IoT-based Water Quality and Environment Monitoring System monitors and analyzes real-time environmental parameters essential for Wolffia globosa cultivation. The architecture consists of two primary components: the Embedded System and the Web Application, as depicted in the system diagram
+1.1.1 Embedded System (ESP32-Based Sensing Module)
+      The IoT node leverages the ESP32 microcontroller as its core, enabling efficient, low-power processing and real-time wireless communications. The board interfaces with a comprehensive suite of environmental sensors:
+* pH Sensor: Measures how acidic or alkaline the water is to ensure suitable growth conditions.
+* EC Sensor (Electrical Conductivity): Detects nutrient concentration in the water by measuring its ability to conduct electricity.
+* Air Temperature Sensor: Monitors the surrounding air temperature to track environmental conditions for Wolffia growth.
+* Water Temperature Sensor: Measures water temperature to ensure it stays within the optimal range.
+* Light Intensity Sensor: Measures ambient light reaching the cultivation area. To optimize photosynthesis and growth.  
+* Real-Time Clock (RTC) Module: Provides accurate timestamps for each sensor reading, ensuring reliable temporal tracking.
+* SD Card Module: Stores collected sensor data locally for logging and backup.
+   Operation Flow:
+o Sensors sample environmental parameters at set intervals (The default is every 15 min.)
+o Each reading is time-stamped by the RTC and buffered for local logging on the SD card.
+o As soon as Wi-Fi connectivity is available, buffered readings are encoded into MQTT packets (JSON with device ID, timestamp, and all sensor values) and published to specific topics organized by node/location/type.
+o During network disruptions, redundant systems maintain offline operations, to ensure no data is lost. Once the connection is restored, all missed packets are transmitted in batches.
+o The node can receive maintenance orders (status checks, configuration updates) over MQTT to maintain proper device health and remote management.
+1.1.2 Web Application: Frontend, Backend and Database
+* Frontend (Vue.js)
+o Realtime Dashboard: Implements MQTT WebSocket subscriptions for live updates without page refresh. Responsive charts and widgets display current parameter values, device status, and trends. 
+o Alerts and Notifications: Visual alert mechanisms are embedded when measurements breach predefined thresholds. Notifications are logged and stored for later reference and reporting.  
+o Trends & Analytics: Interactive time-series plots, historical comparisons, and summary reports are generated. Users can filter by location, device, or parameter, and export results for documentation. 
+o Device Configuration: Secure web forms enable the modification of thresholds and set time intervals.
+
+
+* Backend (Node.js/Express)
+o MQTT Broker: Mosquitto is deployed to manage real-time sensor data streams. The backend subscribes to relevant sensor topics and parses incoming payloads, validating data integrity and flagging anomalies.  
+o API Layer: Express RESTful endpoints handle device registration, sensor configuration and historic data retrieval. 
+o Device Management: Regular device health checks (status flags, connectivity logs, last activity timestamps) are monitored, allowing the system to detect offline nodes or maintenance needs. 
+o Data Analytics: The backend executes threshold comparisons, averaging, event detection (e.g., out-of-range pH), and anomaly detection using statistical. Alerts are generated upon detecting abnormal values and routed to the frontend dashboard in real time. 
+* Database (MongoDB)
+      The system uses MongoDB as�the primary database to�store sensor�readings, device information, and historical data. Each�data record includes device�identification, sensor measurements�(pH, EC, temperature, light intensity), timestamps, and location�information. MongoDB�was selected for its flexible�document structure,�which accommodates the variable�nature of IoT sensor data,�and its ability�to efficiently�handle time-series queries�needed for trend analysis and real-time monitoring dashboards.
+
+4.2 Functional Decomposition Diagram (FDD)
+* Web Application
+
+Figure 4.2.1 Functional Decomposition Diagram of Web Application
+      Figure 4.2.1 presents the Functional Decomposition Diagram of the Web Application, illustrating the key modules and their roles within the Web Dashboard System. The Web Dashboard System serves as the cloud - side application responsible for managing, processing, and visualizing environmental sensor data received from the IoT nodes. It acts as the central interface for users and administrators to monitor Wolffia globosa cultivation conditions, manage devices, and ensure overall system reliability. The system consists of six main modules: Data Ingestion and Storage, User Management, Device Management, API and Backend Services, Front - End Visualization, and System Maintenance.
+1. Data Ingestion and Storage: This module is responsible for collecting and validating data sent from IoT devices through the MQTT communication protocol. It ensures that only clean and consistent sensor data is stored for analysis and visualization.
+      Sub-functions:�
+1.1 Subscribe to MQTT broker topics: Listens to incoming data streams from IoT devices published under specific MQTT topics.
+1.2 Parse incoming JSON payloads: Interprets the structure and content of the received JSON messages.
+1.3 Validate and sanitize incoming data: Filters invalid or corrupted data by checking for correct parameter types, acceptable value ranges, and proper timestamp formats.�
+1.4 Store records in local MongoDB instance: Saves validated and structured sensor readings into MongoDB collections for long-term storage and retrieval.
+2. User Management: This module manages user authentication and access control for the web dashboard. It provides secure user registration, login, and session handling mechanisms to protect the system from unauthorized access.�
+      Sub-functions:�
+2.1 Handle user registration and login: Allows users to create accounts and securely log into the system using credentials or token-based authentication.�
+2.2 Maintain authentication sessions and tokens: Manages persistent user sessions using secure token systems such as JWT, enabling authorized access across multiple requests.
+3. Device Management: This module oversees the registration, authentication, and monitoring of IoT devices connected to the system. It ensures that only verified devices are allowed to transmit data.
+      Sub-functions:
+3.1 Register new devices: Allows authorized users to add new IoT devices to the system by assigning unique identifiers.
+3.2 Validate device tokens: Confirms the legitimacy of each device using authentication tokens.
+3.3 Monitor device connectivity and status: Tracks device activity, uptime, and last communication timestamps.
+3.4 Manage device configuration: Enables administrators to modify operational parameters and settings remotely.
+4. API and Backend Services: This module forms the logic core of the system by providing RESTful APIs for data access and analysis. It connects the database with the front-end interface and implements critical operations such as filtering, alerting, and reporting. �
+      Sub-functions:�
+4.1 Provide RESTful endpoints for data retrieval: Offers standardized API endpoints that clients or external applications can use to request sensor data.�
+4.2 Implement filtering and query features: Supports advanced data retrieval options by enabling users to search and filter readings by time range, sensor type, or value thresholds.�
+4.3 Manage alert thresholds and notifications: Detects abnormal sensor values and triggers notifications or warnings to inform users about potential environmental issues.�
+4.4 Perform data analytics and trend analysis: Analyze collected data to identify patterns and environmental trends.
+4.5 Server analytics and statistical summaries: Generate summarized reports and key performance metrics for dashboard visualization.
+
+
+5. Front-End Visualization: This module is responsible for the graphical presentation and user interaction components of the dashboard. It transforms raw data into meaningful visual representations that allow users to monitor Wolffia globosa cultivation conditions effectively.�
+      Sub-functions:�
+5.1 Display real-time sensor readings: Updates dashboard elements dynamically to reflect the latest sensor data received from the backend.�
+5.2 Render historical charts and trends: Displays long-term sensor data through interactive charts and graphs, aiding in performance tracking and analysis.�
+5.3 Present alerts and system status indicators: Highlights system warnings, device errors, or abnormal readings using color-coded alerts and visual indicators.�
+6. System Maintenance: This module ensures the continuous operation, performance, and reliability of the web dashboard by handling all logging, monitoring, and thereby safeguarding the system against downtime or data loss.
+      Sub-functions:�
+6.1 Log application and API activity: Records user interactions, API requests, and system events to support debugging, analytics, and audit trails.?
+6.2 Monitor performance and uptime: Tracks server response times, resource usage, and application uptime to maintain optimal system performance.
+
+
+* Embedded System
+      
+      Figure 4.2.2 Functional Decomposition Diagram of Embedded System
+      Figure 4.2.2 presents the Functional Decomposition Diagram of the Embedded System, outlining the modules implemented on the ESP32 microcontroller for sensor management, data processing, communication handling, and device maintenance. The Embedded System functions as the IoT node responsible for collecting, processing, and transmitting environmental sensor data. It integrates four main modules Sensor Management, Data Processing, Communication Management, and Device Maintenance, each performing specific tasks that collectively ensure reliable data acquisition, accurate transmission, and overall system integrity.
+1. Sensor Management: This module handles all sensor-related operations, including initialization, calibration, and data acquisition. It ensures continuous reading of environmental parameters necessary for monitoring the Wolffia globosa cultivation environment.�
+
+
+      Sub-functions:�
+1.1 Read pH sensor data: Captures acidity level of the water to maintain optimal conditions for Wolffia globosa growth.�
+1.2 Read temperature sensor data: Measures ambient air temperature in the cultivation environment.�
+1.3 Read water temperature sensor data: Monitors the water temperature, a critical factor influencing Wolffia globosa metabolism.�
+1.4 Read light intensity sensor data: Detects sunlight exposure levels.�
+1.5 Read Total Dissolved Solids (TDS) sensor data: Estimates nutrient concentration in the water, which correlates with EC (electrical conductivity).�
+1.6 Read current time from RTC: Retrieves timestamp from the Real-Time Clock for synchronization and data labeling.
+2. Data Processing: This module processes the raw data obtained from sensors into a structured format ready for transmission. It performs data normalization, validation, and formatting to ensure that the readings are accurate and compatible with the communication protocol.�
+      Sub-functions:�
+2.1 Process raw sensor readings: Filters and scales raw analog/digital data from each sensor.
+2.2 Format readings into JSON payload: Structures data into a JSON object containing parameter names, values, and units.�
+2.3 Timestamp data: Appends synchronized timestamps from the RTC to each data record.
+2.4 Validate payload structure: Ensures data integrity by checking completeness, correct parameter types, and valid value ranges.�
+2.5 Log data to SD card: Stores validated sensor data locally as backup in case of network failure or power interruption.
+3. Communication Management: This module handles all network-related operations to ensure data is successfully transmitted to the web server through the MQTT protocol. It also implements fail-safe mechanisms for unreliable network environments.�
+      Sub-functions:�
+3.1 Establish network connection: Connects the ESP32 to a local Wi-Fi network.�
+3.2 Connect to MQTT broker: Establishes communication with the MQTT server for data exchange.
+3.3 Subscribe to MQTT topic: Listens for incoming commands or configuration updates from the web server.
+3.4 Publish JSON payload to MQTT topic: Transmits formatted data to designated MQTT topics for storage and visualization.�
+3.5 Retry on transmission failure: Implements a retry mechanism or buffered transmission if data sending fails due to connectivity issues.�
+4. Device Maintenance: This module manages the device�s operational health, and system diagnostics to ensure the IoT node stays functional and current without manual intervention.
+
+
+      Sub-functions:�
+4.1 Receive config command: Receives new configuration parameters from the server.
+4.2 Handle device config: Applies and handles new configuration for the embedded device.
+4.3 Receive monitor request: Receives and manages monitoring requests from the server.
+4.4 Send activity log: Sends system log to the server for backup purposes.
+
+
+4.3 Database
+      Entity Relationship Diagram (ERD)
+
+Figure 4.3 Entity Relationship Diagram (ERD)
+      Figure 4.3 presents the Entity Relationship Diagram (ERD) that outlines the database structure and relationships across Users, Farms, Devices, Sensor Data, Alerts, Device Configuration, and System Logs.
+* Entity Explanation
+      The database schema is designed to support comprehensive monitoring and management of Wolffia globosa cultivation environments through an IoT-based system. It consists of seven interconnected entities that capture user information, farm locations, device deployments, environmental sensor readings, system alerts, device configurations, and operational logs.
+o Users: The Users table�stores authentication�credentials and profile�information for�individuals accessing the system. Each user can�manage multiple farms and devices.
+o Farms: The Farms table represents physical cultivation sites owned by users. Each farm is characterized by its name, geographic location, and creation timestamp. This entity enables multi-site management and geographic organization of IoT deployments, with each farm hosting a single dedicated IoT monitoring device.
+o Devices: The Devices table catalogs all IoT sensor nodes deployed across farms. Each device is assigned to a specific user and farm, with attributes tracking its physical location within the farm, operational status (active, inactive, maintenance), last recorded activity, and timestamps for creation and updates. The table also maintains references to alert and configuration records for comprehensive device management.
+o Sensor Data: The Sensor Data table stores time-series environmental measurements collected by IoT devices. Each record captures critical water quality and environmental parameters including pH value, electrical conductivity (EC), total dissolved solids (TDS), water temperature, air temperature, and light intensity. A quality flag attribute indicates data validity and reliability.
+
+
+o Alerts: The Alerts table logs system-generated notifications triggered when sensor readings exceed predefined thresholds or when devices malfunction. Each alert record references the associated device and optionally links to the specific sensor data reading that triggered the event. Alerts include type classification, severity parameters, threshold values, actual measured values, descriptive messages, and creation timestamps.
+o Device Configuration: The Device Configuration table stores operational parameters and threshold settings for each IoT device. Configuration parameters include MQTT topic assignments, alert enablement flags, sampling intervals, and acceptable ranges for each monitored parameter (pH, EC, light intensity, air temperature, water temperature). Each device has exactly one active configuration that governs its monitoring behavior and alert generation.
+o System Logs: The System Logs table records operational events for auditing, debugging, and system health monitoring. Each log entry is associated with a device and optionally linked to a specific configuration state. Log attributes include type classification (INFO, WARNING, ERROR), event descriptions, detailed messages, and timestamps.
+* Attribute Explanation
+o Users
+1. user_id�(PK): Unique identifier for each user (Primary Key)
+2. user_name: Display name used within the system
+3. email: User's email address for authentication and notifications
+4. password: Encrypted password hash for secure authentication
+5. role: User role defining access permissions (admin, farmer)
+6. created_at: Timestamp of account creation
+o Farms
+1. farm_id�(PK): Unique identifier for each farm location
+2. user_id�(FK): Foreign key referencing the farm owner in the Users table
+3. farm_name: Descriptive name of the farm
+4. location: location or address of the farm
+5. created_at: Timestamp of farm registration
+o Devices
+1. device_id�(PK): Unique identifier for each IoT device
+2. user_id�(FK): Foreign key referencing the device owner
+3. config_id (FK): Foreign key referencing the configuration
+4. alert_id (FK): Foreign key referencing associated alerts
+5. config_id (FK): Foreign key referencing the device's configuration
+6. location: Physical installation location within a farm
+7. status: Current operational status (active, offline, maintenance)
+8. last_activity: Timestamp of most recent data transmission
+9. update_at: Timestamp of last device configuration update
+10. created_at: Timestamp of device registration
+o Sensor Data
+1. data_id�(PK): Unique identifier for each sensor reading record
+2. device_id�(FK): Foreign key referencing the source device
+3. ph_value: Measured pH level of water (0�14 scale)
+4. ec_value: Electrical conductivity in micro siemens per centimeter (?S/cm)
+5. tds_value: Total dissolved solids concentration in parts per million (ppm)
+6. water_temperature_c: Water temperature in degrees Celsius
+7. air_temperature_c: Ambient air temperature in degrees Celsius
+8. light_intensity: Light level measured in lux
+9. quality_flag: Data quality indicator (valid, suspect, error)
+10. created_at: Timestamp of sensor reading
+o Alerts
+1. alert_id�(PK): Unique identifier for each alert
+2. device_id�(FK): Foreign key referencing the device that triggered the alert
+3. data_id�(FK): Foreign key referencing the specific sensor reading (optional)
+4. alert_type: Classification of alert
+5. parameter: Environmental parameter that triggered the alert
+6. threshold_value: Configured threshold value that was exceeded
+7. actual_value: Measured value that triggered the alert
+8. message: Human-readable alert description
+9. created_at: Timestamp when alert was generated
+o Device Configuration
+1. config_id�(PK): Unique identifier for each configuration record
+2. device_id�(FK): Foreign key referencing the configured device
+3. mqtt_topic: MQTT topic for data publishing
+4. alert_enabled: Boolean flag enabling/disabling alert generation
+5. sampling_interval: Time interval between sensor readings (in seconds)
+6. ph_min: Minimum acceptable pH value
+7. ph_max: Maximum acceptable pH value
+8. ec_value_min: Minimum acceptable electrical conductivity
+9. ec_value_max: Maximum acceptable electrical conductivity
+10. light_intensity_min: Minimum acceptable light intensity
+11. light_intensity_max: Maximum acceptable light intensity
+12. air_temp_min: Minimum acceptable air temperature
+13. air_temp_max: Maximum acceptable air temperature
+14. water_temp_min: Minimum acceptable water temperature
+15. water_temp_max: Maximum acceptable water temperature
+16. updated_at: Timestamp of last configuration update
+17. created_at: Timestamp of configuration creation
+o System Logs
+1. log_id�(PK): Unique identifier for each log entry
+2. device_id�(FK): Foreign key referencing the device associated with the log
+3. config_id�(FK): Foreign key referencing active configuration at log time (optional)
+4. log_type: Log level classification (INFO, WARNING, ERROR)
+5. event: Brief event identifier or code
+6. message: Detailed log message describing the event
+7. created_at: Timestamp of log entry creation
+o Relationships
+      The database schema implements the following relationships to maintain data integrity and enable efficient querying:
+* Users ? Farms (1:M): One user can own and manage multiple farms. This relationship enables multi-site operations and centralized user management across distributed cultivation locations.
+* Users ? Devices (1:M): One user can register and control multiple IoT devices. This relationship supports scalable device deployment while maintaining ownership accountability.
+* Farms ? Devices (1:0..1): One farm can host zero or one IoT sensor device. This relationship ensures dedicated monitoring for each farm site, simplifying device management and maintaining clear farm-device associations.
+* Devices ? Sensor Data (1:M): One device generates multiple time-stamped sensor readings over its operational lifetime. This relationship captures the temporal sequence of environmental measurements for trend analysis and historical reporting.
+* Devices ? Alerts (1:0..M): One device can trigger multiple alerts when environmental conditions exceed configured thresholds or when device malfunctions occur. This relationship enables comprehensive alert tracking and health monitoring.
+
+
+* Devices ? Device Configuration (1:1): One device has exactly one configuration record. This one-to-one relationship ensures each device operates under a single, well-defined set of parameters and thresholds, preventing configuration conflicts and simplifying device management.
+* Devices ? System Logs (1:0..M): One device generates zero or multiple log entries documenting operational events, configuration, errors, and status changes. This optional relationship supports system auditing and troubleshooting while accommodating newly registered devices that have not yet generated logs.
+* Sensor Data ? Alerts (1:M): One sensor reading may trigger multiple alerts if multiple parameters simultaneously exceed thresholds. This relationship links alert notifications directly to the measurements that caused them.
+* Device Configuration ? System Logs (1:0..1): One configuration state can be referenced by zero or one log entry. This optional relationship allows tracking of configuration-related events while maintaining database flexibility for configurations that have not yet been referenced in system logs.
+4.4 UX/UI Design
+      The User Interface (UI) of the Wolffia globosa Monitoring System is designed to provide an intuitive and visually structured platform for farmers and researchers to monitor, manage, and analyze Wolffia globosa farm conditions. The design follows a clean, modern layout consistent with Material Design and Vue.js component architecture, ensuring responsiveness across devices and ease of navigation.
+
+
+      The User Experience (UX) emphasizes clarity and efficiency by presenting key data such as pH, temperature, dissolved oxygen, and light intensity in visually distinguishable sections. Each screen is crafted to support a specific operational task from real-time monitoring to analytical reporting thereby reducing cognitive load and improving workflow efficiency for end-users.
+4.4.1 Dashboard Interface
+ 
+ Figure 4.4.1 Real-Time Monitoring Dashboard Interface
+      Purpose: To display real-time environmental parameters and water quality metrics from IoT sensors in a single consolidated view.
+      Design Overview: The Dashboard screen (Figure 4.4.1) presents live readings of pH, temperature, light intensity, and dissolved oxygen, accompanied by optimal threshold indicators for each parameter. Time-series graphs for the past 24 hours, 7 days, and 30 days allow users to analyze temporal trends and identify fluctuations in environmental stability.
+      Key Features:
+* Real-time connection indicator (MQTT connection status).
+* Parameter cards show current values with optimal ranges.
+* Interactive graph filters (24H / 7D / 30D).
+* �Refresh� and �Export� buttons for on-demand updates and data export.
+4.4.2 Device Management
+ 
+ Figure 4.4.2 Device Management Interface
+      Purpose: To enable farmers to register, monitor, and configure IoT devices deployed in multiple tanks or farm zones.
+      Design Overview: The Device Management screen (Figure 4.4.2) presents a summary of all registered devices with indicators showing active, offline, and warning statuses. A search and filter bar allows users to locate devices by type or operational state. The �Add Device� button facilitates onboarding of new hardware through an interactive form linked to the system�s backend API.
+      Key Features:
+* Device count summary (Active, Warning, Offline, Total).
+* Search and filter functionalities for quick access.
+* Device registration via form-based input.
+* Status-based color indicators (green for active, yellow for warning, red for offline).
+4.4.3 Farm Management
+ 
+ Figure 4.4.3 Farm Management Interface
+      Purpose: To organize IoT devices by geographical or operational locations, enabling large-scale management across multiple farms.
+      Design Overview: The Farm Management interface (Figure 4.4.3) lists all registered farms with aggregated statistics such as the number of devices, tanks, and overall system health. Each farm card provides quick insight into Water Quality and System Health percentages, color-coded by performance level (green for optimal,    orange for moderate, red for poor). Users can manage or view details of each farm site.
+      Key Features:
+* Farm cards with progress bars for key performance indicators.
+* Geographic grouping
+* Summary of active devices and tanks per farm.
+* �Manage� and �View Details� buttons for farm-level analytics.
+4.4.4 Analytics and Reports
+ 
+ Figure 4.4.4 Analytics and Reports Interface
+      Purpose: To provide in-depth analysis of water quality trends, device performance, and alert distribution.
+      Design Overview: The Analytics module (Figure 4.4.4) aggregates sensor data from multiple devices and visualizes it through charts and statistics. Average readings of pH, temperature, light intensity, and dissolved oxygen are calculated over selectable time periods. The report export feature allows users to generate PDF summaries for farm management reviews.
+      Key Features:
+* Summary cards displaying averages and percentage change.
+* Trend graphs comparing parameters over time.
+* Device performance metrics (uptime, reliability).
+* Alert distribution visualization.
+* �Export Report� function for record-keeping.
+
+4.4.1 
+4.4.2 
+4.4.3 
+4.4.4 
+4.4.5 Alerts and Notifications
+ 
+ Figure 4.4.5 Alerts Interface
+      Purpose: To promptly notify users of abnormal conditions or system faults.
+      Design Overview: The Alerts view lists notifications triggered when environmental parameters exceed thresholds. Each alert is categorized by severity and timestamped for traceability. The system supports real-time notifications via MQTT and highlights unresolved alerts with a red badge indicator on the sidebar.
+      Key Features:
+* Real-time MQTT-triggered alerts.
+* Alert categorization by type and severity.
+* Acknowledgment and resolution tracking.
+4.4.6 Settings
+ 
+ Figure 4.4.6 System Settings Interface
+      Purpose: To allow users to customize system behavior, update profile information, and configure alert thresholds.
+      Design Overview: The Settings page (Figure 4.4.6) enables users to modify water quality threshold values, user preferences, and notification settings. It also provides administrative tools for managing accounts and access permissions.
+      Key Features:
+* User account management and profile editing.
+* Threshold configuration for pH, EC, temperature, and DO.
+* Notification preferences for email and in-app alerts.
+* Role-based access control.
+
+
+Design Principles Applied
+* Consistency: A unified layout and typography across all views for cohesive visual identity.
+* Minimalism: Simplified color palette and iconography for readability and clarity.
+* Responsiveness: Adaptive layout compatible with both desktop and mobile devices.
+* Data Visibility: Emphasis on real-time visualization through cards, charts, and status bars.
+* User Efficiency: Task-oriented grouping and intuitive navigation to minimize operational steps.
+   Summary
+      The UX/UI design of the Wolffia globosa Monitoring System provides an integrated digital environment that enhances user engagement [NS12]and decision-making efficiency. By combining real-time IoT data visualization with responsive web components, the interface empowers users to maintain optimal water conditions, manage farm assets effectively, and ensure sustainable Wolffia globosa cultivation.
+
+
+
+
+CHAPTER 5
+EVALUATION AND RESULTS
+      
+
+
+CHAPTER 6
+CONCLUSION AND FUTURE WORK
+      
+      
+      
+
+REFERENCES
+1.	Dr. W. Pan-utai, �Wolffia: green aqua plant and alternative protein for human health,� vol. 50, no. 4, Dec. 2020, Available: https://kukr.lib.ku.ac.th/kukr_es/bkn/search_detail/dowload_digital_file/20010688/159252
+2.	NSTDA, ��Ƿ�. ����Ẻ����� ���Ӿ�������� ����෤����� IoT �����ͧ��,� NSTDA News, Jul. 25, 2025. Accessed: Oct. 26, 2025. [Online]. Available: https://www.nstda.or.th/home/news_post/nstda-aising-wolffia-globosa-with-iot-250529/
+3.	A. Sneineh and A. A. Shabaneh, �Design of a smart hydroponics monitoring system using an ESP32 microcontroller and the Internet of Things,� MethodsX, vol. 11, 2023, Art. no. 102401. doi: 10.1016/j.mex.2023.102401. [Online]. Available: https://www.sciencedirect.com/science/article/pii/S2215016123003977
+4.	ResearchGate, �IoT based Aquaponics Monitoring System (PDF).� Accessed: Oct. 26, 2025. [Online]. Available: https://www.researchgate.net/publication/327953706_IoT_based_Aquaponics_Monitoring_System
+5.	O. Ogbolumani and B. Mabaso, �An IoT-Based Hydroponic Monitoring and Control System for Sustainable Food Production,� Journal of Digital Food, Energy & Water Systems, vol. 4, no. 2, Dec. 2023. [Online]. Available: https://www.researchgate.net/publication/377021115_An_IoT-Based_Hydroponic_Monitoring_and_Control_System_for_Sustainable_Food_Production
+
+
+6.	Haryanto, M. Ulum, A. F. Ibadillah, R. Alfita, K. Aji, and R. Rizkyandi, �Smart aquaponic system based Internet of Things (IoT),� J. Phys.: Conf. Ser., vol. 1211, Apr. 2019, Art. no. 012047. doi: 10.1088/1742-6596/1211/1/012047. [Online]. Available: https://www.researchgate.net/publication/332916245_Smart_aquaponic_system_based_Internet_of_Things_IoT
+
+
+
+AI USAGE ACKNOWLEDGMENT STATEMENT
+
+      We acknowledge that we have utilized Generative Artificial Intelligence (Generative AI) tools (ChatGPT, Grammarly, Quillbot) in preparing this work. The AI tools were used for the following purposes:
+* Idea development
+* Research assistance (e.g., literature review)
+* Summarization and paraphrasing
+* Draft generation
+* Linguistic correction, grammar checking, or transalation
+* Code editing and debugging
+* Code generation
+* Employing AI in the final product (e.g., generative AI API, etc.)
+* Other (please specify): ����������..
+
+Mr. Kasama Kiatapakul
+Miss Napassawan Sonjate
+Mr. Sittikorn Maneewong 
+
+APPENDIX A
+<INSERT YOUR TOPIC>
+
+      
+[NS1]����ҷ���Ѵ���ú
+[NS2]��������Ţ Figure ��� Caption, refer �֧ figure  � paragraph
+[NS3]��¹���� -- paragraph ����ͧ͸Ժ�¢�鹵͹��÷���ਤ����ٻ�Ҿ��ҹ�� �����͸Ժ������к���ҷӧҹ�ѧ�
+[NS4]͸Ժ�´������ EC �������
+[NS5]Humidity �٧���͵��Ҵ�?
+
+[NS6]duckweed?? �������
+��ػ��Ң����� factor ���������ѹ��ͧ Wolffia ����
+[DG7]�ѹ����� ChatGPT ��������? ��ҹ����������ͧ ��ͧ��¹����
+[NS8]����᤻
+[NS9R8]᤻���
+[DG10]Need to mentioned this figure in the paragraph
+[DG11]- mention this table in the paragraph
+- ���� paper �к���������к���������� monitor �ת��״�˹ ��������㹵��ҧ����
+[NS12].
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Faculty of ICT, Mahidol Univ.	Senior Project / iii
+
+
+
+
+
+
+
+
+		Related works / iv
+
+
+
+
+Faculty of ICT, Mahidol Univ.	B.Sc. (ICT) / 5
+
+
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	Methodology / 22
+
+
+
+
+
+Faculty of ICT, Mahidol Univ.	B.Sc. (ICT) / 21
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
