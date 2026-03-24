@@ -13,21 +13,34 @@ router.use(authenticate);
 // Get all farms
 router.get("/", async (req, res) => {
   try {
-    const query = {};
+    const { page = 1, limit = 20 } = req.query;
+    const query = { is_deleted: { $ne: true } };
     if (req.user.role !== "admin") {
       query.user_id = req.user._id;
     }
 
-    const farms = await Farm.find(query)
-      .sort({ created_at: -1 })
-      .populate("user_id", "user_name email");
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [total, farms] = await Promise.all([
+      Farm.countDocuments(query),
+      Farm.find(query)
+        .sort({ created_at: -1 })
+        .populate("user_id", "user_name email")
+        .skip(skip)
+        .limit(parseInt(limit))
+    ]);
+    const totalPages = Math.max(1, Math.ceil(total / parseInt(limit)));
 
     // Get device counts for each farm
     const farmsWithStats = await Promise.all(
       farms.map(async (farm) => {
-        const deviceCount = await Device.countDocuments({ farm_id: farm._id });
-        const activeDeviceCount = await Device.countDocuments({
+        const deviceQuery = {
           farm_id: farm._id,
+          is_deleted: { $ne: true },
+        };
+        const deviceCount = await Device.countDocuments(deviceQuery);
+        const activeDeviceCount = await Device.countDocuments({
+          ...deviceQuery,
           status: "active",
         });
 
@@ -43,7 +56,16 @@ router.get("/", async (req, res) => {
       }),
     );
 
-    res.json(farmsWithStats);
+    res.json({
+      success: true,
+      data: farmsWithStats,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: totalPages,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -73,8 +95,12 @@ router.get("/:id", async (req, res) => {
     // Re-populate for the response
     await farm.populate("user_id", "user_name email");
 
-    const deviceCount = await Device.countDocuments({ farm_id: farm._id });
-    const devices = await Device.find({ farm_id: farm._id });
+    const deviceQuery = {
+      farm_id: farm._id,
+      is_deleted: { $ne: true },
+    };
+    const deviceCount = await Device.countDocuments(deviceQuery);
+    const devices = await Device.find(deviceQuery);
 
     res.json({
       ...farm.toObject(),
@@ -96,7 +122,7 @@ router.post("/", async (req, res) => {
         : req.user._id;
 
     // Check if user already has a farm
-    const existingFarm = await Farm.findOne({ user_id: ownerId });
+    const existingFarm = await Farm.findOne({ user_id: ownerId, is_deleted: { $ne: true } });
     if (existingFarm) {
       return res
         .status(400)
@@ -174,7 +200,7 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Delete farm
+// Delete farm (Soft delete by default)
 router.delete("/:id", async (req, res) => {
   try {
     const farm = await Farm.findById(req.params.id);
@@ -195,8 +221,8 @@ router.delete("/:id", async (req, res) => {
         .json({ success: false, message: "Access denied to this farm" });
     }
 
-    // Check if farm has devices
-    const deviceCount = await Device.countDocuments({ farm_id: req.params.id });
+    // Check if farm has devices (active or inactive, but not deleted)
+    const deviceCount = await Device.countDocuments({ farm_id: req.params.id, is_deleted: { $ne: true } });
 
     if (deviceCount > 0) {
       return res.status(400).json({
@@ -205,9 +231,13 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    await Farm.findByIdAndDelete(req.params.id);
+    if (req.query.hard === "true" && req.user.role === "admin") {
+      await Farm.findByIdAndDelete(req.params.id);
+    } else {
+      await Farm.findByIdAndUpdate(req.params.id, { is_deleted: true });
+    }
 
-    res.json({ success: true, message: "Farm deleted" });
+    res.json({ success: true, message: req.query.hard === "true" ? "Farm permanently deleted" : "Farm deleted" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -218,6 +248,7 @@ router.get("/:farmId/devices", async (req, res) => {
   try {
     const devices = await Device.find({
       farm_id: req.params.farmId,
+      is_deleted: { $ne: true }
     });
 
     res.json(devices);
@@ -238,9 +269,11 @@ router.get("/:farmId/statistics", async (req, res) => {
 
     const deviceCount = await Device.countDocuments({
       farm_id: req.params.farmId,
+      is_deleted: { $ne: true },
     });
     const activeDeviceCount = await Device.countDocuments({
       farm_id: req.params.farmId,
+      is_deleted: { $ne: true },
       status: "active",
     });
 

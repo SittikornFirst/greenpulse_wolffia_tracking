@@ -1,7 +1,7 @@
 <template>
     <div class="farm-details-view">
         <div class="details-header">
-            <button @click="$router.back()" class="back-btn">
+            <button @click="goBack" class="back-btn">
                 <ArrowLeft :size="20" />
                 <span>Back</span>
             </button>
@@ -39,7 +39,7 @@
                     </div>
                     <div class="info-item">
                         <span class="info-label">Device:</span>
-                        <span class="info-value">{{ deviceCount > 0 ? '1 Device Connected' : 'No Device' }}</span>
+                        <span class="info-value">{{ deviceCount > 0 ? `${deviceCount} Device${deviceCount > 1 ? 's' : ''} Connected` : 'No Device' }}</span>
                     </div>
                     <div class="info-item info-item--full" v-if="farm.description">
                         <span class="info-label">Description:</span>
@@ -92,16 +92,20 @@
             <div class="devices-section">
                 <div class="section-header">
                     <h2>Device in this Farm</h2>
+                    <button @click="goToAddDevice" class="btn btn-primary btn-sm">
+                        <Plus :size="16" />
+                        <span>Add Device</span>
+                    </button>
                 </div>
 
                 <div v-if="farmDevices.length === 0" class="empty-state">
                     <Cpu :size="64" />
                     <h3>No device assigned</h3>
-                    <p>This farm doesn't have a device yet. Each farm can have one monitoring device.</p>
-                    <router-link to="/devices" class="btn btn-primary">
+                    <p>This farm doesn't have a device yet. Add a device to start monitoring this farm.</p>
+                    <button @click="goToAddDevice" class="btn btn-primary">
                         <Plus :size="20" />
-                        <span>Go to Devices</span>
-                    </router-link>
+                        <span>Add Device</span>
+                    </button>
                 </div>
 
                 <div v-else class="devices-grid">
@@ -192,14 +196,37 @@ export default {
             farmDevices.value.filter(d => d.status === 'active').length
         );
         const warningDeviceCount = computed(() =>
-            farmDevices.value.filter(d => d.status === 'warning').length
+            farmDevices.value.filter(d => d.status === 'maintenance').length
         );
         const offlineDeviceCount = computed(() =>
             farmDevices.value.filter(d => d.status === 'inactive' || d.status === 'error').length
         );
 
         const goToDeviceDetails = (deviceId) => {
-            router.push(`/devices/${deviceId}`);
+            router.push({
+                path: `/devices/${deviceId}`,
+                query: { from: route.fullPath }
+            });
+        };
+
+        const goToAddDevice = () => {
+            router.push({
+                path: '/devices',
+                query: {
+                    farmId: farm.value?._id || route.params.id,
+                    openAdd: 'true'
+                }
+            });
+        };
+
+        const goBack = () => {
+            const from = typeof route.query.from === 'string' ? route.query.from : '';
+            const target = from && from !== route.fullPath ? from : '/farms';
+            if (target) {
+                router.replace(target);
+                return;
+            }
+            router.replace('/farms');
         };
 
         const handleEditFarm = () => {
@@ -219,6 +246,8 @@ export default {
             warningDeviceCount,
             offlineDeviceCount,
             goToDeviceDetails,
+            goToAddDevice,
+            goBack,
             handleEditFarm
         };
     }

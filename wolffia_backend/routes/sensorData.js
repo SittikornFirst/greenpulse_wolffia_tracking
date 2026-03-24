@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import crypto from "crypto";
 import SensorData from "../models/SensorData.js";
 import Device from "../models/Device.js";
@@ -287,10 +288,18 @@ router.get("/:deviceId/latest", async (req, res) => {
 router.get("/:deviceId/history", async (req, res) => {
   try {
     const { range, startDate, endDate, limit = 100 } = req.query;
-    const device = await Device.findOne({
-      device_id: req.params.deviceId,
-      user_id: req.user._id,
-    });
+    const deviceIdParam = req.params.deviceId.toUpperCase();
+    const deviceQuery = {
+      $or: [{ device_id: deviceIdParam }]
+    };
+    if (mongoose.Types.ObjectId.isValid(deviceIdParam)) {
+      deviceQuery.$or.push({ _id: deviceIdParam });
+    }
+    
+    if (req.user.role !== "admin") {
+      deviceQuery.user_id = req.user._id;
+    }
+    const device = await Device.findOne(deviceQuery);
 
     if (!device) {
       return res
@@ -299,32 +308,51 @@ router.get("/:deviceId/history", async (req, res) => {
     }
 
     let startTime;
-    if (range) {
+    if (range && range !== "all") {
       const now = new Date();
       const ranges = {
         "1h": 60 * 60 * 1000,
+        "6h": 6 * 60 * 60 * 1000,
         "24h": 24 * 60 * 60 * 1000,
         "7d": 7 * 24 * 60 * 60 * 1000,
         "30d": 30 * 24 * 60 * 60 * 1000,
+        "1y": 365 * 24 * 60 * 60 * 1000,
       };
-      startTime = new Date(now - ranges[range]);
+      if (ranges[range]) {
+        startTime = new Date(now - ranges[range]);
+      }
     } else if (startDate) {
       startTime = new Date(startDate);
     }
 
-    const query = { device_id: req.params.deviceId };
+    const query = { device_id: device.device_id };
     if (startTime) query.created_at = { $gte: startTime };
     if (endDate) {
       query.created_at = { ...query.created_at, $lte: new Date(endDate) };
     }
 
-    const data = await SensorData.find(query)
-      .sort({ created_at: -1 })
-      .limit(parseInt(limit));
+    const pageNum = parseInt(req.query.page) || 1;
+    const limitNum = parseInt(req.query.limit) || 100;
+    const skip = (pageNum - 1) * limitNum;
 
-    res.json(
-      data.map((doc) => attachVirtualMetrics(doc.toObject({ virtuals: true })))
-    );
+    const [total, data] = await Promise.all([
+      SensorData.countDocuments(query),
+      SensorData.find(query)
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limitNum)
+    ]);
+
+    res.json({
+      success: true,
+      data: data.map((doc) => attachVirtualMetrics(doc.toObject({ virtuals: true }))),
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.max(1, Math.ceil(total / limitNum))
+      }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

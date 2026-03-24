@@ -15,7 +15,7 @@ router.get("/", authorize("admin"), async (req, res) => {
   try {
     const { role, search, page = 1, limit = 20 } = req.query;
 
-    const query = {};
+    const query = { is_deleted: { $ne: true } };
     if (role) {
       query.role = role;
     }
@@ -38,7 +38,7 @@ router.get("/", authorize("admin"), async (req, res) => {
 
     res.json({
       success: true,
-      users,
+      data: users,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -54,7 +54,7 @@ router.get("/", authorize("admin"), async (req, res) => {
 // Get single user (Admin only)
 router.get("/:id", authorize("admin"), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-password");
+    const user = await User.findOne({ _id: req.params.id, is_deleted: { $ne: true } }).select("-password");
 
     if (!user) {
       return res
@@ -186,7 +186,7 @@ router.put("/:id", authorize("admin"), async (req, res) => {
   }
 });
 
-// Delete user (Admin only)
+// Delete user (Soft delete by default)
 router.delete("/:id", authorize("admin"), async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -204,15 +204,21 @@ router.delete("/:id", authorize("admin"), async (req, res) => {
         .json({ success: false, message: "Cannot delete your own account" });
     }
 
-    // Delete user's farm and devices
-    await Farm.deleteMany({ user_id: user._id });
-    await Device.deleteMany({ user_id: user._id });
-
-    await user.deleteOne();
+    if (req.query.hard === "true") {
+      // Hard delete user's farm and devices
+      await Farm.deleteMany({ user_id: user._id });
+      await Device.deleteMany({ user_id: user._id });
+      await user.deleteOne();
+    } else {
+      // Soft delete user, their farm, and their devices
+      await Farm.updateMany({ user_id: user._id }, { is_deleted: true });
+      await Device.updateMany({ user_id: user._id }, { is_deleted: true });
+      await User.findByIdAndUpdate(user._id, { is_deleted: true });
+    }
 
     res.json({
       success: true,
-      message: "User and associated data deleted successfully",
+      message: req.query.hard === "true" ? "User and associated data permanently deleted" : "User and associated data deleted",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

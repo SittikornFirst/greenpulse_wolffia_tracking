@@ -10,10 +10,14 @@ import Farm from "../models/Farm.js";
 import DeviceConfiguration from "../models/DeviceConfiguration.js";
 import SystemLog from "../models/SystemLog.js";
 
+import dotenv from "dotenv";
+import dns from "dns";
+import crypto from "crypto";
+
+dns.setServers(["1.1.1.1"]);
 dotenv.config();
 
-const MONGODB_URI =
-  process.env.MONGODB_URI || "mongodb://localhost:27017/greenpulse_v1";
+const MONGODB_URI = process.env.MONGODB_URI;
 
 // Generate random value within range
 const randomValue = (min, max) => Math.random() * (max - min) + min;
@@ -59,13 +63,13 @@ const seed = async () => {
     console.log("✅ Connected to MongoDB");
 
     // Clear existing data
-    await User.deleteMany({});
-    await Device.deleteMany({});
+    // await User.deleteMany({});
+    // await Device.deleteMany({});
     await SensorData.deleteMany({});
-    await Alert.deleteMany({});
-    await Farm.deleteMany({});
-    await DeviceConfiguration.deleteMany({});
-    await SystemLog.deleteMany({});
+    // await Alert.deleteMany({});
+    // await Farm.deleteMany({});
+    // await DeviceConfiguration.deleteMany({});
+    // await SystemLog.deleteMany({});
     console.log(" Cleared existing data");
 
     // Create users
@@ -117,7 +121,7 @@ const seed = async () => {
 
     // Create devices and assign to farms
     const devices = [];
-    const deviceIds = ["00001", "00002", "00003"];
+    const deviceIds = ["MKUMW0RG-1JS0A"];
 
     for (let i = 0; i < deviceIds.length; i++) {
       const deviceId = `GREENPULSE-V1-${deviceIds[i]}`;
@@ -158,71 +162,8 @@ const seed = async () => {
 
     console.log("📟 Created devices and configurations");
 
-    // Generate sensor data (7 days, every 30 minutes to reduce volume but cover range)
-    const now = new Date();
-    const sensorDataPromises = [];
-
-    for (const device of devices) {
-      // Generate for last 7 days
-      for (let hours = 0; hours < 24 * 7; hours++) {
-        // Every 15 minutes
-        for (let minutes = 0; minutes < 60; minutes += 15) {
-          const timestamp = new Date(now - (hours * 60 + minutes) * 60 * 1000);
-          const reading = generateSensorReading(device, timestamp);
-          sensorDataPromises.push(SensorData.create(reading));
-        }
-      }
-    }
-
-    await Promise.all(sensorDataPromises);
-    console.log("📊 Generated sensor data");
-
-    // Create sample alerts
-    const alerts = [
-      {
-        device_id: devices[0].device_id,
-        data_id: crypto.randomUUID(),
-        user_id: farmer1._id,
-        alert_type: "ph_value_low",
-        parameter: "pH",
-        threshold_value: 6.0,
-        actual_value: 5.4,
-        message: "pH level dropped below minimum threshold (6.0)",
-        severity: "caution",
-        status: "active",
-        created_at: new Date(Date.now() - 30 * 60000), // 30 mins ago
-      },
-      {
-        device_id: devices[1].device_id,
-        data_id: crypto.randomUUID(),
-        user_id: farmer1._id,
-        alert_type: "water_temperature_high",
-        parameter: "Water Temp",
-        threshold_value: 28,
-        actual_value: 30,
-        message: "Water temperature exceeded configured threshold (28°C)",
-        severity: "caution",
-        status: "active",
-        created_at: new Date(Date.now() - 2 * 60 * 60000), // 2 hours ago
-      },
-      {
-        device_id: devices[2].device_id,
-        data_id: crypto.randomUUID(),
-        user_id: farmer1._id,
-        alert_type: "light_intensity_low",
-        parameter: "Light Intensity",
-        threshold_value: 3500,
-        actual_value: 3000,
-        message: "Light intensity below acceptable range (3500 lux)",
-        severity: "caution",
-        status: "resolved",
-        created_at: new Date(Date.now() - 1 * 24 * 60 * 60000), // 1 day ago
-        resolved_at: new Date(),
-      },
-    ];
-
-    await Alert.insertMany(alerts);
-    console.log("🚨 Created alerts");
+    // --- Removed mock sensor data and alerts generation ---
+    // User requested to rely on the real MQTT data going forward.
 
     console.log("\n✅ Seed completed successfully!");
     console.log("\nTest Credentials:");

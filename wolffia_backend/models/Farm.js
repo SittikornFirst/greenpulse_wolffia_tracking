@@ -17,6 +17,10 @@ const farmSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    is_deleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },

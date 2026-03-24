@@ -44,6 +44,10 @@ const deviceSchema = new mongoose.Schema(
     last_activity: {
       type: Date,
     },
+    is_deleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },

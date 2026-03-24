@@ -5,10 +5,10 @@
                 <h1>Farm Management</h1>
                 <p class="subtitle">Manage your Wolffia farming locations</p>
             </div>
-            <button @click="showAddModal = true" class="btn btn-primary">
+            <!-- <button @click="showAddModal = true" class="btn btn-primary">
                 <Plus :size="20" />
                 <span>Add Farm</span>
-            </button>
+            </button> -->
         </div>
 
         <!-- Farm Stats -->
@@ -91,6 +91,28 @@
             </div>
         </div>
 
+        <!-- Pagination -->
+        <div v-if="farmsStore.pagination.pages > 1" class="pagination-container">
+            <div class="pagination-info">
+                Showing <strong>{{ (farmsStore.pagination.page - 1) * farmsStore.pagination.limit + 1 }}</strong>
+                to <strong>{{ Math.min(farmsStore.pagination.page * farmsStore.pagination.limit, farmsStore.pagination.total)
+                }}</strong>
+                of <strong>{{ farmsStore.pagination.total }}</strong> farms
+            </div>
+            <div class="pagination-controls">
+                <button @click="handlePageChange(farmsStore.pagination.page - 1)"
+                    :disabled="farmsStore.pagination.page === 1 || loading" class="btn btn-secondary btn-sm">
+                    Previous
+                </button>
+                <span class="page-current">Page {{ farmsStore.pagination.page }} of {{ farmsStore.pagination.pages }}</span>
+                <button @click="handlePageChange(farmsStore.pagination.page + 1)"
+                    :disabled="farmsStore.pagination.page === farmsStore.pagination.pages || loading"
+                    class="btn btn-secondary btn-sm">
+                    Next
+                </button>
+            </div>
+        </div>
+
         <!-- Add/Edit Farm Modal -->
         <div v-if="showAddModal" class="modal-overlay" @click="showAddModal = false">
             <div class="modal" @click.stop>
@@ -160,10 +182,10 @@ export default {
             location: ''
         });
 
-        const fetchFarms = async () => {
+        const fetchFarms = async (page = 1) => {
             loading.value = true;
             try {
-                await farmsStore.fetchFarms();
+                await farmsStore.fetchFarms({ page, limit: 12 });
             } catch (error) {
                 console.error('Failed to fetch farms:', error);
             } finally {
@@ -171,8 +193,12 @@ export default {
             }
         };
 
+        const handlePageChange = (page) => {
+            fetchFarms(page);
+        };
+
         // Calculate stats from farms
-        const totalFarms = computed(() => farms.value.length);
+        const totalFarms = computed(() => farmsStore.pagination.total || farms.value.length);
         const totalDevices = computed(() =>
             farms.value.reduce((sum, farm) => sum + (farm.deviceCount || 0), 0)
         );
@@ -228,9 +254,11 @@ export default {
             };
         };
 
-        onMounted(async () => {
+        const loadData = async () => {
             await fetchFarms();
-        });
+        };
+
+        onMounted(loadData);
 
         return {
             loading,
@@ -245,7 +273,9 @@ export default {
             goToFarmDetails,
             handleEditFarm,
             handleSaveFarm,
-            closeModal
+            closeModal,
+            handlePageChange,
+            farmsStore
         };
     }
 };
@@ -673,5 +703,33 @@ export default {
     .form-row {
         grid-template-columns: 1fr;
     }
+}
+
+.pagination-container {
+    margin-top: 2rem;
+    padding: 1.25rem;
+    background: white;
+    border-radius: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.pagination-info {
+    font-size: 0.875rem;
+    color: #6b7280;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.page-current {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.875rem;
 }
 </style>

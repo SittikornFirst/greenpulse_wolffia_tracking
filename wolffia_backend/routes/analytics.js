@@ -1,6 +1,10 @@
+import mongoose from "mongoose";
 import express from "express";
 import SensorData from "../models/SensorData.js";
 import Device from "../models/Device.js";
+import User from "../models/User.js";
+import Farm from "../models/Farm.js";
+import Alert from "../models/Alert.js";
 import { authenticate } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -85,31 +89,64 @@ router.get("/admin/stats", async (req, res) => {
       });
     }
 
-    const User = (await import("../models/User.js")).default;
-    const Farm = (await import("../models/Farm.js")).default;
-    const Alert = (await import("../models/Alert.js")).default;
+    // Get counts (exclude deleted items)
+    const query = { is_deleted: { $ne: true } };
+    
+    // DEBUG LOGS
+    console.log("[ADMIN_STATS] Fetching counts for database:", mongoose.connection.name);
+    
+    const [totalUsers, totalFarms, totalDevices, activeAlertsCount, activeDevicesCount] = await Promise.all([
+      User.countDocuments(query),
+      Farm.countDocuments(query),
+      Device.countDocuments(query),
+      Alert.countDocuments({ status: { $ne: "resolved" } }),
+      Device.countDocuments({ ...query, status: "active" })
+    ]);
 
-    // Get counts
-    const totalUsers = await User.countDocuments();
-    const totalFarms = await Farm.countDocuments();
-    const totalDevices = await Device.countDocuments();
-    const activeAlerts = await Alert.countDocuments({ is_resolved: false });
+    const db = mongoose.connection.db;
+    const [uRaw, fRaw, dRaw] = await Promise.all([
+      db.collection('users').countDocuments(query),
+      db.collection('farms').countDocuments(query),
+      db.collection('devices').countDocuments(query)
+    ]);
 
-    // Get last sensor data with device and farm info
-    const lastSensorData = await SensorData.find()
+    console.log("[ADMIN_STATS] Found counts:", { 
+      dbName: db.databaseName,
+      mongoose: { totalUsers, totalFarms, totalDevices, activeAlertsCount },
+      raw: { uRaw, fRaw, dRaw }
+    });
+
+    const finalUsers = totalUsers || uRaw;
+    const finalFarms = totalFarms || fRaw;
+    const finalDevices = totalDevices || dRaw;
+
+    // Get last sensor data
+    const rawSensorData = await SensorData.find()
       .sort({ created_at: -1 })
-      .limit(10)
-      .populate({
-        path: "device_id",
-        select: "device_name farm_id",
-        populate: {
-          path: "farm_id",
-          select: "farm_name",
-        },
-      });
+      .limit(10);
+    
+    console.log("[ADMIN_STATS] rawSensorData count:", rawSensorData.length);
+
+    const deviceIdsInData = [...new Set(rawSensorData.map(d => d.device_id))];
+    const devices = await Device.find({ device_id: { $in: deviceIdsInData } }).populate("farm_id");
+    const deviceMap = devices.reduce((map, d) => {
+      map[d.device_id] = d;
+      return map;
+    }, {});
+
+    const lastSensorData = rawSensorData.map(data => {
+      const device = deviceMap[data.device_id];
+      return {
+        device_id: data.device_id,
+        device_name: device?.device_name || "Unknown Device",
+        farm_name: device?.farm_id?.farm_name || "Unknown Farm",
+        timestamp: data.created_at,
+      };
+    });
 
     // Get device activity status
     const deviceActivity = await Device.aggregate([
+      { $match: { is_deleted: { $ne: true } } },
       {
         $lookup: {
           from: "sensordatas",
@@ -139,17 +176,15 @@ router.get("/admin/stats", async (req, res) => {
     res.json({
       success: true,
       stats: {
-        totalUsers,
-        totalFarms,
-        totalDevices,
-        activeAlerts,
+        totalUsers: finalUsers,
+        totalFarms: finalFarms,
+        totalDevices: finalDevices,
+        activeAlerts: activeAlertsCount,
+        activeDevices: activeDevicesCount,
+        inactiveDevices: Math.max(0, finalDevices - activeDevicesCount),
+        recentSensorEvents: rawSensorData.length,
       },
-      lastSensorData: lastSensorData.map((data) => ({
-        device_id: data.device_id?.device_id,
-        device_name: data.device_id?.device_name,
-        farm_name: data.device_id?.farm_id?.farm_name,
-        timestamp: data.created_at,
-      })),
+      lastSensorData,
       deviceActivity: populatedDeviceActivity.map((device) => ({
         device_id: device.device_id,
         device_name: device.device_name,

@@ -33,6 +33,10 @@ const userSchema = new mongoose.Schema({
     },
     last_login: {
         type: Date
+    },
+    is_deleted: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }

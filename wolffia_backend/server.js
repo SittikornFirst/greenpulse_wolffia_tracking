@@ -6,6 +6,7 @@ import mqtt from "mqtt";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import dns from "dns";
+import crypto from "crypto";
 
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
@@ -148,11 +149,32 @@ export const broadcastToUser = (userId, data) => {
   });
 };
 
+const dropLegacyDeviceFarmUniqueIndex = async () => {
+  try {
+    const indexes = await Device.collection.indexes();
+    const legacyFarmIndex = indexes.find(
+      (index) => index.unique && index.key && index.key.farm_id === 1,
+    );
+
+    if (!legacyFarmIndex) {
+      return;
+    }
+
+    await Device.collection.dropIndex(legacyFarmIndex.name);
+    console.log(
+      `Dropped legacy unique device farm index: ${legacyFarmIndex.name}`,
+    );
+  } catch (error) {
+    console.error("Failed to drop legacy device farm index:", error.message);
+  }
+};
+
 // Connect to MongoDB
 mongoose
   .connect(MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log("✅ Connected to MongoDB");
+    await dropLegacyDeviceFarmUniqueIndex();
     server.listen(PORT, () => {
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📡 WebSocket server running on ws://localhost:${PORT}/ws`);
@@ -166,42 +188,117 @@ mongoose
 // MQTT Client Setup
 const mqttUrl = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 const mqttClient = mqtt.connect(mqttUrl);
+app.locals.mqttClient = mqttClient;
 
 mqttClient.on("connect", () => {
   console.log("✅ Connected to MQTT broker:", mqttUrl);
   mqttClient.subscribe("devices/+/sensor", { qos: 1 });
+  mqttClient.subscribe("greenpulse/sensors", { qos: 1 });
+  mqttClient.subscribe("greenpulse/phtds", { qos: 1 });
 });
 
 mqttClient.on("message", async (topic, payload) => {
   try {
-    const topicParts = topic.split("/");
-    const deviceIdFromTopic = topicParts[1]; // devices/:id/sensor
-
     const data = JSON.parse(payload.toString());
+
+    let device;
+    let deviceIdFromTopic;
+    if (topic === "greenpulse/sensors" || topic === "greenpulse/phtds") {
+      deviceIdFromTopic = (data.device_id || data.deviceId || "").toUpperCase();
+      device = await Device.findOne({ device_id: deviceIdFromTopic });
+    } else {
+      const topicParts = topic.split("/");
+      deviceIdFromTopic = (topicParts[1] || "").toUpperCase(); // devices/:id/sensor
+      device = await Device.findOne({ device_id: deviceIdFromTopic });
+    }
+
     console.log(`📡 MQTT Message from ${deviceIdFromTopic}:`, data);
 
-    // Find device references
-    const device = await Device.findOne({ device_id: deviceIdFromTopic });
     if (!device) {
-      console.warn(`⚠️ Received data for unknown device: ${deviceIdFromTopic}`);
+      console.warn(
+        `⚠️ Received data but no active device found. Topic: ${topic}`,
+      );
       return;
     }
 
-    // Save Sensor Data
-    const newSensorData = new SensorData({
-      device_id: device._id, // Use MongoDB _id
-      ph_value: data.ph,
-      ec_value: data.ec,
-      tds_value: data.tds,
-      water_temperature_c: data.water_temp,
-      air_temperature_c: data.air_temp,
-      air_humidity: data.humidity, // Added based on .ino
-      light_intensity: data.light,
-      timestamp: new Date(),
-    });
+    // Helper to safely extract values from various possible payload formats
+    const getPh = (d) =>
+      d.ph?.val ?? (typeof d.ph === "number" ? d.ph : undefined);
+    const getEc = (d) => d.tds?.ec ?? d.ec_ms ?? d.ec;
+    const getTds = (d) =>
+      d.tds?.ppm ??
+      d.tds_ppm ??
+      (typeof d.tds === "number" ? d.tds : undefined);
+    const getWater = (d) => d.water_c ?? d.water_temp;
+    const getAir = (d) => d.air_c ?? d.air_temp;
+    const getHum = (d) => d.hum ?? d.humidity;
+    const getLux = (d) => d.lux ?? d.light_lux ?? d.light;
 
-    await newSensorData.save();
-    console.log("💾 Sensor data saved");
+    // Save Sensor Data
+    try {
+      const latestReading = await SensorData.findOne({
+        device_id: device.device_id,
+      }).sort({ created_at: -1 });
+
+      const fallbackReading = latestReading || {};
+      const nextPh = getPh(data);
+      const nextEc = getEc(data);
+      const nextTds = getTds(data);
+
+      const newSensorData = new SensorData({
+        device_id: device.device_id, // Use the string ID, not MongoDB _id
+        data_id: crypto.randomUUID(), // <-- NEW: Required by SensorData schema
+        ph_value: nextPh ?? fallbackReading.ph_value,
+        ec_value:
+          nextEc ??
+          (nextTds !== undefined
+            ? Number((nextTds * 0.0005).toFixed(3))
+            : fallbackReading.ec_value),
+        tds_value:
+          nextTds ??
+          (nextEc !== undefined
+            ? Number((nextEc / 0.0005).toFixed(0))
+            : fallbackReading.tds_value),
+        water_temperature_c: getWater(data) ?? fallbackReading.water_temperature_c,
+        air_temperature_c: getAir(data) ?? fallbackReading.air_temperature_c,
+        air_humidity: getHum(data) ?? fallbackReading.air_humidity,
+        light_intensity: getLux(data) ?? fallbackReading.light_intensity,
+        timestamp: new Date(),
+      });
+
+      await newSensorData.save();
+      console.log("💾 Sensor data saved");
+    } catch (saveErr) {
+      console.error("❌ Failed to save SensorData to DB:", saveErr.message);
+    }
+
+    device.last_activity = new Date();
+    await device.save();
+
+    // Process relay status updates if present from ESP32 payload
+    if (data.relays && Array.isArray(data.relays) && device.config_id) {
+      try {
+        const config = await DeviceConfiguration.findById(device.config_id);
+        if (config && config.relays) {
+          let relaysChanged = false;
+          data.relays.forEach((state, i) => {
+            if (i < config.relays.length) {
+              const newStatus = Boolean(state);
+              if (config.relays[i].status !== newStatus) {
+                config.relays[i].status = newStatus;
+                relaysChanged = true;
+              }
+            }
+          });
+          if (relaysChanged) {
+            await config.save();
+            console.log(`🔌 Relay states updated for device ${deviceIdFromTopic}`);
+          }
+        }
+      } catch (relayErr) {
+        console.error("❌ Failed to update Relay states in DB:", relayErr.message);
+      }
+    }
 
     // Broadcast to WebSocket clients
     // broadcastToDevice(deviceIdFromTopic, { type: 'sensor_update', data: newSensorData });
@@ -302,3 +399,7 @@ mqttClient.on("message", async (topic, payload) => {
     console.error("❌ MQTT Message Error:", err);
   }
 });
+
+
+
+

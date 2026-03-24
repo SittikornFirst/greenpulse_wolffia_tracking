@@ -4,6 +4,12 @@ import apiService from '@/services/api';
 
 export const useFarmsStore = defineStore('farms', () => {
     const farms = ref([]);
+    const pagination = ref({
+        page: 1,
+        limit: 20,
+        total: 0,
+        pages: 1,
+    });
     const loading = ref(false);
     const error = ref(null);
     const selectedFarmId = ref(null);
@@ -12,12 +18,25 @@ export const useFarmsStore = defineStore('farms', () => {
         farms.value.find(farm => (farm._id || farm.id) === selectedFarmId.value) || null
     );
 
-    async function fetchFarms() {
+    async function fetchFarms(params = {}) {
         loading.value = true;
         error.value = null;
         try {
-            const response = await apiService.getFarms();
-            farms.value = response.data || [];
+            const response = await apiService.getFarms(params);
+            const resData = response.data;
+            if (resData && Array.isArray(resData.data)) {
+                farms.value = resData.data || [];
+                pagination.value = {
+                    ...pagination.value,
+                    ...resData.pagination,
+                };
+            } else if (Array.isArray(resData)) {
+                farms.value = resData || [];
+            } else if (resData && resData.success && Array.isArray(resData.farms)) {
+                farms.value = resData.farms || [];
+            } else {
+                farms.value = [];
+            }
 
             if (!selectedFarmId.value && farms.value.length > 0) {
                 selectedFarmId.value = farms.value[0]._id || farms.value[0].id;
@@ -60,6 +79,12 @@ export const useFarmsStore = defineStore('farms', () => {
 
     function $reset() {
         farms.value = [];
+        pagination.value = {
+            page: 1,
+            limit: 20,
+            total: 0,
+            pages: 1,
+        };
         loading.value = false;
         error.value = null;
         selectedFarmId.value = null;
@@ -67,6 +92,7 @@ export const useFarmsStore = defineStore('farms', () => {
 
     return {
         farms,
+        pagination,
         loading,
         error,
         selectedFarmId,

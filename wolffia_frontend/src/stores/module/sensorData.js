@@ -154,10 +154,20 @@ export const useSensorDataStore = defineStore("sensorData", () => {
         range,
         startDate,
         endDate,
+        page: options.page,
+        limit: options.limit,
       });
 
+      const resData = response.data;
       const key = `${deviceId}_${range}`;
-      historicalData.value[key] = (response.data || []).map(normalizeReading);
+      
+      if (resData && Array.isArray(resData.data)) {
+        historicalData.value[key] = resData.data.map(normalizeReading);
+      } else if (Array.isArray(resData)) {
+        historicalData.value[key] = resData.map(normalizeReading);
+      } else {
+        historicalData.value[key] = [];
+      }
 
       return response.data;
     } catch (err) {

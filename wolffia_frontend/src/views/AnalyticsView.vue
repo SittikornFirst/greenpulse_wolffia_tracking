@@ -6,32 +6,52 @@
         <p class="subtitle">Review sensor readings for a specific device</p>
       </div>
       <div class="header-actions">
-        <div class="device-selector" v-if="hasDevices">
-          <label for="analytics-device">Device</label>
-          <select id="analytics-device" v-model="selectedDeviceId">
-            <option
-              v-for="device in devices"
-              :key="device._id || device.device_id"
-              :value="device.device_id"
-            >
-              {{ device.device_name }}
-            </option>
-          </select>
-        </div>
-        <div class="entries-selector">
-          <label for="entries-per-page">Show</label>
-          <select id="entries-per-page" v-model="entriesPerPage">
-            <option :value="5">5</option>
-            <option :value="10">10</option>
-            <option :value="50">50</option>
-            <option :value="100">100</option>
-          </select>
-          <span>entries</span>
+        <div class="control-group">
+          <div class="device-selector" v-if="hasDevices">
+            <label for="analytics-device">Device</label>
+            <div class="select-wrapper">
+              <select id="analytics-device" v-model="selectedDeviceId">
+                <option
+                  v-for="device in devices"
+                  :key="device._id || device.device_id"
+                  :value="device.device_id"
+                >
+                  {{ device.device_name }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="entries-selector">
+            <label for="analytics-time">Time Range</label>
+            <div class="select-wrapper">
+              <select id="analytics-time" v-model="timeRange">
+                <option value="1h">1 Hour</option>
+                <option value="6h">6 Hours</option>
+                <option value="24h">24 Hours</option>
+                <option value="7d">7 Days</option>
+                <option value="30d">30 Days</option>
+                <option value="1y">1 Year</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+          </div>
+          <div class="entries-selector">
+            <label for="entries-per-page">Show</label>
+            <div class="select-wrapper">
+              <select id="entries-per-page" v-model="entriesPerPage">
+                <option :value="5">5</option>
+                <option :value="10">10</option>
+                <option :value="25">25</option>
+                <option :value="50">50</option>
+                <option :value="100">100</option>
+              </select>
+            </div>
+          </div>
         </div>
         <button
           @click="refreshData"
           :disabled="loading"
-          class="btn btn-primary"
+          class="btn btn-primary refresh-btn"
         >
           <RefreshCw :size="18" :class="{ spin: loading }" />
           <span>Refresh</span>
@@ -173,25 +193,39 @@
         </div>
 
         <!-- Pagination -->
-        <div v-if="totalPages > 1" class="pagination">
-          <button
-            @click="currentPage--"
-            :disabled="currentPage === 1"
-            class="btn btn-secondary btn-sm"
-          >
-            Previous
-          </button>
-          <span class="pagination-info">
-            Page {{ currentPage }} of {{ totalPages }} ({{ totalEntries }} total
-            entries)
-          </span>
-          <button
-            @click="currentPage++"
-            :disabled="currentPage === totalPages"
-            class="btn btn-secondary btn-sm"
-          >
-            Next
-          </button>
+        <div v-if="totalPages > 1 || totalEntries > entriesPerPage" class="pagination-container">
+          <div class="pagination-info">
+            Showing <strong>{{ (currentPage - 1) * entriesPerPage + 1 }}</strong>
+            to <strong>{{ Math.min(currentPage * entriesPerPage, totalEntries) }}</strong>
+            of <strong>{{ totalEntries }}</strong> entries
+          </div>
+          <div class="pagination-controls">
+            <button
+              @click="handlePageChange(currentPage - 1)"
+              :disabled="currentPage === 1 || loading"
+              class="btn btn-outline btn-sm shadow-sm"
+            >
+              Previous
+            </button>
+            <div class="page-numbers">
+              <button 
+                v-for="p in visiblePages" 
+                :key="p"
+                @click="handlePageChange(p)"
+                :class="['page-number', { active: currentPage === p }]"
+                :disabled="loading"
+              >
+                {{ p }}
+              </button>
+            </div>
+            <button
+              @click="handlePageChange(currentPage + 1)"
+              :disabled="currentPage === totalPages || loading"
+              class="btn btn-outline btn-sm shadow-sm"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </template>
@@ -234,9 +268,12 @@ export default {
     const farmsStore = useFarmsStore();
 
     const loading = ref(false);
-    const allTableRows = ref([]); // All data
+    const allTableRows = ref([]);
     const currentPage = ref(1);
     const entriesPerPage = ref(10);
+    const totalEntries = ref(0);
+    const totalPages = ref(1);
+    const timeRange = ref("24h");
     const selectedDeviceId = ref(null);
 
     const devices = computed(() => devicesStore.devices);
@@ -418,70 +455,83 @@ export default {
       ];
     });
 
-    // Pagination computeds
-    const totalEntries = computed(() => allTableRows.value.length);
-    const totalPages = computed(
-      () => Math.ceil(totalEntries.value / entriesPerPage.value) || 1,
-    );
+    const tableRows = computed(() => allTableRows.value);
 
-    const tableRows = computed(() => {
-      const start = (currentPage.value - 1) * entriesPerPage.value;
-      const end = start + entriesPerPage.value;
-      return allTableRows.value.slice(start, end);
+    const visiblePages = computed(() => {
+      const pages = [];
+      const range = 2;
+      for (let i = Math.max(1, currentPage.value - range); i <= Math.min(totalPages.value, currentPage.value + range); i++) {
+        pages.push(i);
+      }
+      return pages;
     });
 
-    const refreshData = async () => {
+    const refreshData = async (resetPage = false) => {
       if (!selectedDeviceId.value) return;
-      loading.value = true;
-      allTableRows.value = []; // Clear existing data
-      currentPage.value = 1; // Reset to first page
+      if (resetPage) currentPage.value = 1;
 
+      loading.value = true;
       try {
         const device = devices.value.find(
           (d) => d.device_id === selectedDeviceId.value,
         );
-        if (!device) {
-          allTableRows.value = [];
-          return;
-        }
+        if (!device) return;
 
-        // Update thresholds from device configuration
+        // Update thresholds
         if (device.config_id || device.configuration) {
-          const config =
-            typeof device.config_id === "object"
-              ? device.config_id
-              : device.configuration;
-          if (config) {
-            updateThresholdsFromConfig(config);
-          }
+          const config = typeof device.config_id === "object" ? device.config_id : device.configuration;
+          if (config) updateThresholdsFromConfig(config);
         }
 
-        const history = await sensorDataStore.fetchHistoricalData(
+        const response = await sensorDataStore.fetchHistoricalData(
           device.device_id,
-          { range: "24h", limit: 500 }, // Fetch more for pagination
+          { 
+            range: timeRange.value, 
+            page: currentPage.value, 
+            limit: entriesPerPage.value 
+          },
         );
-        allTableRows.value = history || [];
+
+        if (response?.success) {
+          allTableRows.value = response.data || [];
+          totalEntries.value = response.pagination?.total || 0;
+          totalPages.value = response.pagination?.pages || 1;
+        } else {
+          allTableRows.value = Array.isArray(response) ? response : [];
+          totalEntries.value = allTableRows.value.length;
+          totalPages.value = Math.ceil(totalEntries.value / entriesPerPage.value) || 1;
+        }
+
+        if (currentPage.value > totalPages.value) {
+          currentPage.value = totalPages.value;
+        }
       } catch (error) {
         console.error("Failed to load analytics:", error);
         allTableRows.value = [];
+        totalEntries.value = 0;
+        totalPages.value = 1;
       } finally {
         loading.value = false;
       }
     };
 
+    const handlePageChange = (page) => {
+      if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+      currentPage.value = page;
+      refreshData();
+    };
+
     // Watch for device or entries changes
-    watch(selectedDeviceId, async (newVal) => {
-      if (newVal) {
-        await refreshData();
-      }
+    watch([selectedDeviceId, timeRange], async () => {
+      await refreshData(true);
     });
 
     watch(entriesPerPage, () => {
-      currentPage.value = 1; // Reset to first page when changing entries per page
+      refreshData(true);
     });
 
     onMounted(async () => {
-      await devicesStore.fetchDevices();
+      await devicesStore.fetchDevices({ page: 1, limit: 100 });
       if (devices.value.length > 0) {
         selectedDeviceId.value = devices.value[0].device_id;
         await refreshData();
@@ -513,14 +563,17 @@ export default {
       devices,
       hasDevices,
       selectedDeviceId,
+      timeRange,
       entriesPerPage,
       currentPage,
       totalPages,
       totalEntries,
       metricCards,
       tableRows,
+      visiblePages,
       allTableRows,
       refreshData,
+      handlePageChange,
       formatTimestamp,
       formatValue,
       formatInteger,
@@ -540,376 +593,199 @@ export default {
 .analytics-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
+  align-items: center;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+  gap: 1.5rem;
 }
 
 .analytics-header h1 {
-  font-size: 2rem;
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.25rem 0;
+}
+
+.header-content p.subtitle {
+  color: #6b7280;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.analytics-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 2rem;
+  text-align: center;
+  background: white;
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  color: #6b7280;
+  margin-bottom: 2rem;
+}
+
+.analytics-empty svg {
+  color: #d1d5db;
+  margin-bottom: 1.5rem;
+}
+
+.analytics-empty h3 {
+  font-size: 1.5rem;
   font-weight: 700;
-  color: #1f2937;
+  color: #111827;
   margin: 0 0 0.5rem 0;
+}
+
+.analytics-empty p {
+  margin-bottom: 2rem;
 }
 
 .subtitle {
   color: #6b7280;
+  font-size: 1rem;
   margin: 0;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
-  background: white;
-  padding: 0.75rem 1.25rem;
-  border-radius: 1rem;
-  box-shadow:
+  gap: 1rem;
+  background: #ffffff;
+  padding: 0.5rem;
+  border-radius: 1.25rem;
+  box-shadow: 
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(229, 231, 235, 0.5);
-  transition: all 0.3s ease;
+    0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  border: 1px solid #f3f4f6;
 }
 
-.header-actions:hover {
-  box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.05),
-    0 4px 6px -2px rgba(0, 0, 0, 0.025);
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-right: 0.5rem;
+  border-right: 1px solid #e5e7eb;
 }
 
 .device-selector,
 .entries-selector {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: #f9fafb;
-  padding: 0.375rem 0.5rem 0.375rem 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid #e5e7eb;
-  transition: all 0.2s ease;
-}
-
-.device-selector:focus-within,
-.entries-selector:focus-within {
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-  background: white;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  min-width: 120px;
 }
 
 .device-selector label,
 .entries-selector label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
-  color: #6b7280;
+  color: #9ca3af;
+  margin-bottom: 0.25rem;
   letter-spacing: 0.05em;
 }
 
-.entries-selector span {
-  font-size: 0.875rem;
-  color: #6b7280;
-  font-weight: 500;
-  padding-right: 0.5rem;
+.select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
-.device-selector select,
-.entries-selector select {
-  border: none;
+.select-wrapper select {
+  appearance: none;
   background: transparent;
+  border: none;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #1f2937;
+  color: #374151;
+  padding: 0 1.5rem 0 0;
   cursor: pointer;
-  padding: 0.25rem 1.5rem 0.25rem 0.25rem;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-  background-position: right 0.25rem center;
-  background-repeat: no-repeat;
-  background-size: 1.25rem;
   outline: none;
+  width: 100%;
 }
 
-.farm-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.farm-selector label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #6b7280;
-}
-
-.farm-selector select {
-  min-width: 200px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.5rem;
-  background: white;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.farm-selector select:focus {
-  outline: none;
-  border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
-}
-
-.time-select {
-  padding: 0.75rem 1rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  background: white;
-  cursor: pointer;
-  font-weight: 500;
+.select-wrapper::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid #9ca3af;
+  border-bottom: 2px solid #9ca3af;
+  transform: rotate(45deg);
+  pointer-events: none;
+  margin-top: -3px;
 }
 
 .btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.65rem 1.25rem;
-  border: none;
+  padding: 0.75rem 1.5rem;
   border-radius: 0.75rem;
   font-weight: 600;
+  transition: all 0.2s;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: none;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.refresh-btn {
+  height: 3.5rem;
+  padding: 0 1.5rem;
+  border-radius: 1rem;
+  margin-left: 0.5rem;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  background: #10b981;
   color: white;
-  box-shadow:
-    0 4px 6px -1px rgba(16, 185, 129, 0.3),
-    0 2px 4px -1px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.39);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
+  background: #059669;
   transform: translateY(-1px);
-  box-shadow:
-    0 8px 12px -2px rgba(16, 185, 129, 0.4),
-    0 4px 6px -2px rgba(16, 185, 129, 0.2);
-  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
-}
-
-.btn-primary:active {
-  transform: translateY(1px);
-  box-shadow:
-    0 2px 4px -1px rgba(16, 185, 129, 0.3),
-    0 1px 2px -1px rgba(16, 185, 129, 0.2);
-}
-
-.btn-secondary {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.btn-secondary:hover {
-  background: #e5e7eb;
-}
-
-.analytics-empty {
-  border: 1px dashed #d1d5db;
-  border-radius: 0.75rem;
-  padding: 3rem 2rem;
-  text-align: center;
-  color: #6b7280;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  align-items: center;
-  background: white;
-}
-
-.analytics-empty svg {
-  color: #d1d5db;
-}
-
-.analytics-empty h3 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0;
-}
-
-.analytics-empty p {
-  margin: 0;
-}
-
-.btn-sm {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 2rem;
-}
-
-.metric-card {
-  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.1),
-    0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  transition:
-    transform 0.2s,
-    box-shadow 0.2s;
-}
-
-.metric-card:hover {
-  transform: translateY(-2px);
-  box-shadow:
-    0 10px 15px -3px rgba(0, 0, 0, 0.1),
-    0 4px 6px -2px rgba(0, 0, 0, 0.05);
-}
-
-.metric-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #6b7280;
-  margin-bottom: 1rem;
-}
-
-.metric-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 0.5rem;
-}
-
-.metric-change {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.metric-change--up {
-  color: #059669;
-}
-
-.metric-change--down {
-  color: #dc2626;
-}
-
-.charts-section {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.chart-card-full,
-.chart-card {
-  background: white;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.charts-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-}
-
-.chart-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.chart-header h2,
-.chart-header h3 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0;
-}
-
-.chart-legend {
-  display: flex;
-  gap: 1.5rem;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.875rem;
-  color: #6b7280;
-}
-
-.legend-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.chart-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 3rem;
-  background: #f9fafb;
-  border-radius: 0.5rem;
-  color: #9ca3af;
-  text-align: center;
-}
-
-.chart-placeholder--small {
-  padding: 2rem;
-}
-
-.chart-placeholder p {
-  margin-top: 1rem;
-  font-size: 0.875rem;
+  margin-bottom: 3rem;
 }
 
 .data-table-section {
   background: white;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 2rem;
+  border-radius: 1.5rem;
+  border: 1px solid #f3f4f6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
 .table-header {
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #f3f4f6;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
 }
 
 .table-header h2 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
   margin: 0;
 }
 
-.table-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.search-input {
-  padding: 0.5rem 1rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
+.table-subtitle {
   font-size: 0.875rem;
+  color: #6b7280;
 }
 
 .table-container {
@@ -922,75 +798,48 @@ export default {
 }
 
 .data-table th {
+  padding: 1.25rem 2rem;
   text-align: left;
-  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #9ca3af;
+  letter-spacing: 0.05em;
   background: #f9fafb;
-  color: #6b7280;
-  font-weight: 600;
-  font-size: 0.875rem;
-  border-bottom: 2px solid #e5e7eb;
 }
 
 .data-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 0.875rem;
+  padding: 1.25rem 2rem;
+  border-top: 1px solid #f3f4f6;
+  font-size: 0.95rem;
+  color: #4b5563;
 }
 
 .data-table tbody tr:hover {
-  background-color: #f9fafb;
+  background: #f9fafb;
+}
+
+.value-cell {
+  font-weight: 700;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
 .timestamp-cell {
   color: #6b7280;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
 }
 
-.device-cell {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.value-cell {
-  font-weight: 600;
-  color: #1f2937;
-}
-
-.status-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: capitalize;
-}
-
-.status-badge--normal {
-  background: #d1fae5;
-  color: #059669;
-}
-
-.status-badge--warning {
-  background: #fef3c7;
-  color: #d97706;
-}
-
-.status-badge--critical {
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.table-footer {
+.pagination-container {
+  padding: 1.5rem 2rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-top: 1px solid #f3f4f6;
 }
 
-.results-info,
-.page-info {
+.pagination-info {
   font-size: 0.875rem;
   color: #6b7280;
 }
@@ -998,92 +847,80 @@ export default {
 .pagination-controls {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.summary-section {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 1.5rem;
+.page-numbers {
+  display: flex;
+  gap: 0.5rem;
 }
 
-.summary-card {
-  background: white;
-  border-radius: 0.75rem;
-  padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.summary-header {
+.page-number {
+  width: 2.5rem;
+  height: 2.5rem;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-  color: #10b981;
-}
-
-.summary-header h3 {
-  font-size: 1rem;
+  justify-content: center;
+  border-radius: 0.75rem;
   font-weight: 600;
-  color: #1f2937;
-  margin: 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+  background: white;
+  color: #4b5563;
 }
 
-.summary-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #1f2937;
-  margin-bottom: 0.5rem;
+.page-number:hover:not(.active) {
+  background: #f3f4f6;
 }
 
-.summary-text {
-  font-size: 0.875rem;
-  color: #6b7280;
-  margin: 0;
+.page-number.active {
+  background: #10b981;
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.4);
 }
 
-@media (max-width: 768px) {
-  .analytics-view {
-    padding: 1rem;
-  }
+.btn-outline {
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #374151;
+}
 
-  .analytics-header {
-    flex-direction: column;
-    gap: 1rem;
-  }
+.btn-outline:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #d1d5db;
+}
 
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 1024px) {
   .header-actions {
     width: 100%;
     flex-direction: column;
+    padding: 1.5rem;
   }
-
-  .header-actions .btn {
+  
+  .control-group {
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
     width: 100%;
-    justify-content: center;
-  }
-
-  .table-header {
+    padding-bottom: 1rem;
+    padding-right: 0;
     flex-direction: column;
-    gap: 1rem;
+    align-items: flex-start;
   }
 
-  .table-actions {
+  .refresh-btn {
     width: 100%;
-    flex-direction: column;
-  }
-
-  .search-input {
-    width: 100%;
-  }
-
-  .table-footer {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .pagination-controls {
-    width: 100%;
-    justify-content: space-between;
+    margin-left: 0;
+    margin-top: 1rem;
   }
 }
 </style>

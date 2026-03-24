@@ -170,7 +170,41 @@
               device.status === "inactive" ? "Activate" : "Deactivate"
             }}</span>
           </button>
+          <button
+            v-if="device.status === 'inactive'"
+            @click.stop="handleArchiveDevice(device)"
+            class="btn btn-danger btn-sm"
+          >
+            <Trash2 :size="16" />
+            <span>Archive</span>
+          </button>
         </div>
+      </div>
+    </div>
+    
+    <!-- Pagination -->
+    <div v-if="devicesStore.pagination.pages > 1" class="pagination-container">
+      <div class="pagination-info">
+        Showing <strong>{{ (devicesStore.pagination.page - 1) * devicesStore.pagination.limit + 1 }}</strong>
+        to <strong>{{ Math.min(devicesStore.pagination.page * devicesStore.pagination.limit, devicesStore.pagination.total) }}</strong>
+        of <strong>{{ devicesStore.pagination.total }}</strong> devices
+      </div>
+      <div class="pagination-controls">
+        <button
+          @click="handlePageChange(devicesStore.pagination.page - 1)"
+          :disabled="devicesStore.pagination.page === 1 || loading"
+          class="btn btn-secondary btn-sm"
+        >
+          Previous
+        </button>
+        <span class="page-current">Page {{ devicesStore.pagination.page }} of {{ devicesStore.pagination.pages }}</span>
+        <button
+          @click="handlePageChange(devicesStore.pagination.page + 1)"
+          :disabled="devicesStore.pagination.page === devicesStore.pagination.pages || loading"
+          class="btn btn-secondary btn-sm"
+        >
+          Next
+        </button>
       </div>
     </div>
 
@@ -188,11 +222,10 @@
           </button>
         </div>
         <div class="modal-body">
-          <form @submit.prevent="handleAddDevice">
+          <!-- Step 1: Input Form -->
+          <form v-if="!newlyCreatedDevice" @submit.prevent="handleAddDevice">
             <div class="form-group">
-              <label for="device-name"
-                >Device Name (e.g. Pond Name / ชื่อบ่อน้ำ)</label
-              >
+              <label for="device-name">Device Name (e.g. Pond Name / ชื่อบ่อน้ำ)</label>
               <input
                 id="device-name"
                 v-model="newDevice.name"
@@ -212,10 +245,20 @@
               />
             </div>
 
+            <div class="form-group" v-if="isAdmin">
+              <label for="device-farm">Assign to Farm</label>
+              <select id="device-farm" v-model="newDevice.farmId" required class="form-control">
+                <option value="" disabled>Select a farm...</option>
+                <option v-for="farm in farms" :key="farm._id || farm.id" :value="farm._id || farm.id">
+                  {{ farm.farm_name || farm.name }}
+                </option>
+              </select>
+            </div>
+
             <div class="form-actions">
               <button
                 type="button"
-                @click="showAddModal = false"
+                @click="closeAddModal"
                 class="btn btn-secondary"
               >
                 Cancel
@@ -225,6 +268,36 @@
               </button>
             </div>
           </form>
+
+          <!-- Step 2: Success Credentials -->
+          <div v-else class="success-credentials">
+            <div class="success-icon">
+              <CheckCircle :size="48" color="#10b981" />
+            </div>
+            <h3>Device Registered Successfully!</h3>
+            <p>Please copy these credentials into your ESP32 Arduino code to authenticate:</p>
+            
+            <div class="credentials-box">
+              <div class="credential-item">
+                <span class="cred-label">Device ID (for Greenpulse payload):</span>
+                <code class="cred-value">{{ newlyCreatedDevice.device_id }}</code>
+              </div>
+              <div class="credential-item">
+                <span class="cred-label">MQTT Control Topic (Subscribe):</span>
+                <code class="cred-value">greenpulse/control/{{ newlyCreatedDevice.device_id }}</code>
+              </div>
+              <div class="credential-item">
+                <span class="cred-label">MQTT Telemetry Topic (Publish):</span>
+                <code class="cred-value">greenpulse/sensors</code>
+              </div>
+            </div>
+
+            <div class="form-actions" style="margin-top: 20px;">
+              <button @click="closeAddModal" class="btn btn-primary" style="width: 100%; justify-content: center;">
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -310,8 +383,8 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
   Plus,
   Search,
@@ -351,6 +424,7 @@ export default {
     MapPin,
   },
   setup() {
+    const route = useRoute();
     const router = useRouter();
     const devicesStore = useDevicesStore();
     const farmsStore = useFarmsStore();
@@ -384,25 +458,7 @@ export default {
 
     const totalDevicesCount = computed(() => devicesStore.totalDevices);
 
-    const filteredDevices = computed(() => {
-      let devices = devicesStore.devices;
-
-      if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase();
-        devices = devices.filter(
-          (d) =>
-            d.device_name?.toLowerCase().includes(query) ||
-            d.device_id?.toLowerCase().includes(query) ||
-            d.farmName?.toLowerCase().includes(query),
-        );
-      }
-
-      if (filterStatus.value) {
-        devices = devices.filter((d) => d.status === filterStatus.value);
-      }
-
-      return devices;
-    });
+    const filteredDevices = computed(() => devicesStore.devices);
 
     const getDeviceIcon = () => Cpu;
 
@@ -421,18 +477,45 @@ export default {
     };
 
     const goToDeviceDetails = (deviceId) => {
-      router.push(`/devices/${deviceId}`);
+      router.push({
+        path: `/devices/${deviceId}`,
+        query: { from: route.fullPath },
+      });
+    };
+
+    const newlyCreatedDevice = ref(null);
+
+    const closeAddModal = () => {
+      showAddModal.value = false;
+      newlyCreatedDevice.value = null;
+      newDevice.value = {
+        name: "",
+        farmId: route.query.farmId || "",
+        location: "",
+      };
+      if (route.query.openAdd === "true") {
+        const { openAdd, ...remainingQuery } = route.query;
+        router.replace({ path: route.path, query: remainingQuery });
+      }
     };
 
     const handleAddDevice = async () => {
       adding.value = true;
       try {
-        await devicesStore.addDevice({
+        const response = await apiService.createDevice({
           name: newDevice.value.name,
           location: newDevice.value.location,
+          farm_id: newDevice.value.farmId,
         });
-        showAddModal.value = false;
-        newDevice.value = { name: "", farmId: "", location: "" };
+        
+        // Refresh store
+        await devicesStore.fetchDevices({
+          page: devicesStore.pagination.page,
+          limit: devicesStore.pagination.limit,
+        });
+        
+        // Show success screen with credentials
+        newlyCreatedDevice.value = response.data;
       } catch (error) {
         alert(
           "Failed to add device: " +
@@ -447,6 +530,28 @@ export default {
       router.push(`/devices/${device.id}`);
     };
 
+    const handleArchiveDevice = async (device) => {
+      if (device.status !== "inactive") {
+        alert("Deactivate the device first, then archive it.");
+        return;
+      }
+
+      if (!confirm(`Archive ${device.device_name}? This will hide it from the UI but keep it in the database.`)) {
+        return;
+      }
+
+      try {
+        await devicesStore.removeDevice(device.device_id);
+        await loadData(Math.min(devicesStore.pagination.page, devicesStore.pagination.pages));
+      } catch (error) {
+        console.error("Archive device error:", error);
+        alert(
+          "Failed to archive device: " +
+            (error.response?.data?.message || error.message),
+        );
+      }
+    };
+
     const handleToggleDeviceStatus = async (device) => {
       const newStatus = device.status === "inactive" ? "active" : "inactive";
       const action = newStatus === "inactive" ? "deactivate" : "activate";
@@ -458,7 +563,12 @@ export default {
           status: newStatus,
         });
         // Refresh the device list to ensure UI is in sync
-        await devicesStore.fetchDevices();
+        await devicesStore.fetchDevices({
+          page: devicesStore.pagination.page,
+          limit: devicesStore.pagination.limit,
+          ...(searchQuery.value ? { search: searchQuery.value } : {}),
+          ...(filterStatus.value ? { status: filterStatus.value } : {}),
+        });
         alert(`Device ${action}d successfully!`);
       } catch (error) {
         console.error("Toggle device status error:", error);
@@ -474,13 +584,19 @@ export default {
       showConfigModal.value = true;
     };
 
-    onMounted(async () => {
+    const loadData = async (page = 1) => {
       loading.value = true;
       try {
+        const params = {
+          page,
+          limit: 12
+        };
+        if (searchQuery.value) params.search = searchQuery.value;
+        if (filterStatus.value) params.status = filterStatus.value;
+
         await Promise.all([
-          devicesStore.fetchDevices(),
-          farmsStore.farms.length ? Promise.resolve() : farmsStore.fetchFarms(),
-          // Fetch current user to check role
+          devicesStore.fetchDevices(params),
+          farmsStore.fetchFarms({ page: 1, limit: 100 }),
           apiService.getCurrentUser().then((response) => {
             user.value = response.data.user;
           }),
@@ -490,7 +606,34 @@ export default {
       } finally {
         loading.value = false;
       }
+    };
+
+    const handlePageChange = (page) => {
+      loadData(page);
+    };
+
+    let searchTimeout = null;
+    watch([searchQuery, filterStatus], () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        loadData(1);
+      }, 500);
     });
+
+    watch(
+      () => route.query,
+      (query) => {
+        if (query.farmId) {
+          newDevice.value.farmId = query.farmId;
+        }
+        if (query.openAdd === "true") {
+          showAddModal.value = true;
+        }
+      },
+      { immediate: true },
+    );
+
+    onMounted(loadData);
 
     return {
       loading,
@@ -510,11 +653,17 @@ export default {
       formatTime,
       goToDeviceDetails,
       handleAddDevice,
+      closeAddModal,
+      newlyCreatedDevice,
       handleEditDevice,
+      handleArchiveDevice,
       handleToggleDeviceStatus,
       showConfigModal,
       configDevice,
       openConfigModal,
+      loadData,
+      handlePageChange,
+      devicesStore
     };
   },
 };
@@ -606,6 +755,11 @@ export default {
 .btn-sm {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .stats-grid {
@@ -998,7 +1152,7 @@ export default {
 }
 
 .form-group input,
-.form-group select {
+.form-group input {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #d1d5db;
@@ -1010,7 +1164,18 @@ export default {
 .form-group select:focus {
   outline: none;
   border-color: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  background-color: white;
+  color: #1f2937;
+  font-size: 1rem;
+  font-family: inherit;
 }
 
 .form-actions {
@@ -1020,7 +1185,68 @@ export default {
 }
 
 .form-actions .btn {
-  flex: 1;
+  white-space: nowrap;
+}
+
+/* Success Credentials View */
+.success-credentials {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.success-icon {
+  margin-bottom: 1rem;
+}
+
+.success-credentials h3 {
+  font-size: 1.25rem;
+  color: #1f2937;
+  margin: 0 0 0.5rem 0;
+}
+
+.success-credentials p {
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+}
+
+.credentials-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  width: 100%;
+  text-align: left;
+}
+
+.credential-item {
+  margin-bottom: 1.25rem;
+}
+
+.credential-item:last-child {
+  margin-bottom: 0;
+}
+
+.cred-label {
+  display: block;
+  font-size: 0.875rem;
+  color: #475569;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.cred-value {
+  display: block;
+  background: #f1f5f9;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  font-family: monospace;
+  font-size: 0.875rem;
+  color: #0f172a;
+  word-break: break-all;
+  border: 1px dashed #cbd5e1;
 }
 
 @media (max-width: 768px) {
@@ -1045,5 +1271,33 @@ export default {
   .devices-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.pagination-container {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  background: white;
+  border-radius: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.page-current {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
 }
 </style>

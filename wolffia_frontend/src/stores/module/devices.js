@@ -43,6 +43,12 @@ const normalizeDevice = (device) => ({
 
 export const useDevicesStore = defineStore("devices", () => {
   const devices = ref([]);
+  const pagination = ref({
+    page: 1,
+    limit: 12,
+    total: 0,
+    pages: 1,
+  });
   const loading = ref(false);
   const error = ref(null);
   const selectedDeviceId = ref(null);
@@ -69,20 +75,35 @@ export const useDevicesStore = defineStore("devices", () => {
     () => (type) => devices.value.filter((device) => device.type === type),
   );
 
-  const totalDevices = computed(() => devices.value.length);
+  const totalDevices = computed(
+    () => pagination.value.total || devices.value.length,
+  );
 
   const selectedDevice = computed(() =>
     devices.value.find((device) => device.id === selectedDeviceId.value),
   );
 
   // Actions
-  async function fetchDevices(farmId = null) {
+  async function fetchDevices(params = {}) {
     loading.value = true;
     error.value = null;
 
     try {
-      const response = await apiService.getDevices(farmId);
-      devices.value = (response.data || []).map(normalizeDevice);
+      const response = await apiService.getDevices(params);
+      const resData = response.data;
+      if (resData && Array.isArray(resData.data)) {
+        devices.value = resData.data.map(normalizeDevice);
+        pagination.value = {
+          ...pagination.value,
+          ...resData.pagination,
+        };
+      } else if (Array.isArray(resData)) {
+        devices.value = resData.map(normalizeDevice);
+      } else if (resData && resData.success && Array.isArray(resData.devices)) {
+        devices.value = resData.devices.map(normalizeDevice);
+      } else {
+        devices.value = [];
+      }
       return devices.value;
     } catch (err) {
       error.value = err.message || "Failed to fetch devices";
@@ -215,6 +236,12 @@ export const useDevicesStore = defineStore("devices", () => {
   // Reset store
   function $reset() {
     devices.value = [];
+    pagination.value = {
+      page: 1,
+      limit: 12,
+      total: 0,
+      pages: 1,
+    };
     loading.value = false;
     error.value = null;
     selectedDeviceId.value = null;
@@ -223,6 +250,7 @@ export const useDevicesStore = defineStore("devices", () => {
   return {
     // State
     devices,
+    pagination,
     loading,
     error,
     selectedDeviceId,

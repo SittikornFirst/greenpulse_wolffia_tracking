@@ -1,4 +1,5 @@
 import express from "express";
+import crypto from "crypto";
 import Device from "../models/Device.js";
 import Farm from "../models/Farm.js";
 import DeviceConfiguration from "../models/DeviceConfiguration.js";
@@ -12,8 +13,8 @@ router.use(authenticate);
 // Get all devices
 router.get("/", async (req, res) => {
   try {
-    const { farmId } = req.query;
-    const query = {};
+    const { farmId, status, search, page = 1, limit = 20 } = req.query;
+    const query = { is_deleted: { $ne: true } };
 
     // If user is not admin, only show their devices
     if (req.user.role !== "admin") {
@@ -24,11 +25,46 @@ router.get("/", async (req, res) => {
       query.farm_id = farmId;
     }
 
-    const devices = await Device.find(query)
-      .populate("farm_id", "farm_name location")
-      .populate("config_id")
-      .sort({ created_at: -1 });
-    res.json(devices);
+    if (status) {
+      query.status = status;
+    }
+
+    if (search) {
+      const regex = new RegExp(search, "i");
+      const matchingFarms = await Farm.find({ farm_name: regex }).select("_id");
+      const matchingFarmIds = matchingFarms.map((farm) => farm._id);
+
+      query.$or = [
+        { device_name: regex },
+        { device_id: regex },
+        { location: regex },
+        ...(matchingFarmIds.length > 0 ? [{ farm_id: { $in: matchingFarmIds } }] : []),
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const [total, devices] = await Promise.all([
+      Device.countDocuments(query),
+      Device.find(query)
+        .populate("farm_id", "farm_name location")
+        .populate("config_id")
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+    ]);
+    const totalPages = Math.max(1, Math.ceil(total / parseInt(limit)));
+
+    res.json({
+      success: true,
+      data: devices,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: totalPages,
+      },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -37,9 +73,15 @@ router.get("/", async (req, res) => {
 // Get single device
 router.get("/:id", async (req, res) => {
   try {
+    const mongoose = await import("mongoose");
     const query = {
-      $or: [{ _id: req.params.id }, { device_id: req.params.id }],
+      is_deleted: { $ne: true }
     };
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      query.$or = [{ _id: req.params.id }, { device_id: req.params.id }];
+    } else {
+      query.device_id = req.params.id;
+    }
 
     // If not admin, ensure user owns the device
     if (req.user.role !== "admin") {
@@ -148,9 +190,33 @@ router.post("/", async (req, res) => {
       .populate("farm_id", "farm_name location")
       .populate("config_id");
 
+    if (req.app.locals.mqttClient) {
+      req.app.locals.mqttClient.publish(
+        `greenpulse/register/${device.device_id}`,
+        JSON.stringify({
+          event: "device_registered",
+          device_id: device.device_id,
+          device_name: device.device_name,
+          control_topic: `greenpulse/control/${device.device_id}`,
+          telemetry_topic: "greenpulse/sensors",
+          phtds_topic: "greenpulse/phtds",
+          config_topic: `greenpulse/register/${device.device_id}`,
+        }),
+        { retain: true }
+      );
+    }
+
     res.status(201).json(hydratedDevice);
   } catch (error) {
     if (error.code === 11000) {
+      console.error("Duplicate key error details:", error);
+      if (error.keyPattern && error.keyPattern.farm_id) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Device creation is blocked by a stale database constraint on farm_id. Restart the backend to apply the index cleanup, then try again.",
+        });
+      }
       return res.status(400).json({
         success: false,
         message: "Device ID already exists. Please use a unique ID.",
@@ -289,19 +355,34 @@ router.put("/:id/configuration", async (req, res) => {
   }
 });
 
-// Delete device
+// Delete device (Soft delete by default)
 router.delete("/:id", async (req, res) => {
   try {
-    const query = {
-      $or: [{ _id: req.params.id }, { device_id: req.params.id }],
-    };
+    const mongoose = await import("mongoose");
+    const query = {};
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      query.$or = [{ _id: req.params.id }, { device_id: req.params.id }];
+    } else {
+      query.device_id = req.params.id;
+    }
 
     // If not admin, ensure user owns the device
     if (req.user.role !== "admin") {
       query.user_id = req.user._id;
     }
 
-    const device = await Device.findOneAndDelete(query);
+    let device;
+    if (req.query.hard === "true" && req.user.role === "admin") {
+      // Admin Hard Delete
+      device = await Device.findOneAndDelete(query);
+      if (device) {
+        await DeviceConfiguration.findOneAndDelete({ device_id: device._id });
+        await SystemLog.deleteMany({ device_id: device._id });
+      }
+    } else {
+      // Soft Delete
+      device = await Device.findOneAndUpdate(query, { is_deleted: true }, { new: true });
+    }
 
     if (!device) {
       return res
@@ -309,10 +390,194 @@ router.delete("/:id", async (req, res) => {
         .json({ success: false, message: "Device not found" });
     }
 
-    await DeviceConfiguration.findOneAndDelete({ device_id: device._id });
-    await SystemLog.deleteMany({ device_id: device._id });
+    res.json({ success: true, message: req.query.hard === "true" ? "Device permanently deleted" : "Device deleted" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
-    res.json({ success: true, message: "Device deleted" });
+// --- Relay Control Endpoints ---
+
+// Update Relay Configuration
+router.put("/:id/relays/:relayId", async (req, res) => {
+  try {
+    const { name, status } = req.body;
+    const relayId = parseInt(req.params.relayId);
+
+    const mongoose = await import("mongoose");
+    const query = {};
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      query.$or = [{ _id: req.params.id }, { device_id: req.params.id }];
+    } else {
+      query.device_id = req.params.id;
+    }
+
+    const device = await Device.findOne(query);
+    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const config = await DeviceConfiguration.findOne({ device_id: device._id });
+    if (!config) return res.status(404).json({ success: false, message: "Config not found" });
+
+    const relayIndex = config.relays.findIndex(r => r.relay_id === relayId);
+    if (relayIndex === -1) return res.status(404).json({ success: false, message: "Relay not found" });
+
+    if (name !== undefined) config.relays[relayIndex].name = name;
+    if (status !== undefined) config.relays[relayIndex].status = status;
+    
+    await config.save();
+
+    // Broadcast to ESP32
+    if (req.app.locals.mqttClient) {
+      req.app.locals.mqttClient.publish(
+        `greenpulse/control/${device.device_id}`,
+        JSON.stringify({
+          command: "update_relay",
+          relay: relayId,
+          name: config.relays[relayIndex].name,
+          status: config.relays[relayIndex].status
+        })
+      );
+    }
+
+    res.json(config.relays[relayIndex]);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// --- Schedule Management Endpoints ---
+
+// Add Schedule
+router.post("/:id/schedules", async (req, res) => {
+  try {
+    const { relays, days, startHour, startMinute, stopHour, stopMinute, enabled } = req.body;
+
+    const mongoose = await import("mongoose");
+    const query = {};
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      query.$or = [{ _id: req.params.id }, { device_id: req.params.id }];
+    } else {
+      query.device_id = req.params.id;
+    }
+
+    const device = await Device.findOne(query);
+    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const config = await DeviceConfiguration.findOne({ device_id: device._id });
+    if (!config) return res.status(404).json({ success: false, message: "Config not found" });
+
+    const newSchedule = {
+      schedule_id: crypto.randomUUID(),
+      relays: relays || [],
+      days: days || [],
+      startHour: startHour || 0,
+      startMinute: startMinute || 0,
+      stopHour: stopHour || 0,
+      stopMinute: stopMinute || 0,
+      enabled: enabled !== undefined ? enabled : true
+    };
+
+    config.schedules.push(newSchedule);
+    await config.save();
+    
+    // Broadcast to ESP32
+    if (req.app.locals.mqttClient) {
+      req.app.locals.mqttClient.publish(
+        `greenpulse/control/${device.device_id}`,
+        JSON.stringify({
+          command: "update_schedules",
+          schedules: config.schedules
+        })
+      );
+    }
+    
+    res.status(201).json(newSchedule);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Update Schedule
+router.put("/:id/schedules/:schedId", async (req, res) => {
+  try {
+    const { relays, days, startHour, startMinute, stopHour, stopMinute, enabled } = req.body;
+    
+    const mongoose = await import("mongoose");
+    const query = {};
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      query.$or = [{ _id: req.params.id }, { device_id: req.params.id }];
+    } else {
+      query.device_id = req.params.id;
+    }
+
+    const device = await Device.findOne(query);
+    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const config = await DeviceConfiguration.findOne({ device_id: device._id });
+    if (!config) return res.status(404).json({ success: false, message: "Config not found" });
+
+    const schedIndex = config.schedules.findIndex(s => s.schedule_id === req.params.schedId);
+    if (schedIndex === -1) return res.status(404).json({ success: false, message: "Schedule not found" });
+
+    if (relays !== undefined) config.schedules[schedIndex].relays = relays;
+    if (days !== undefined) config.schedules[schedIndex].days = days;
+    if (startHour !== undefined) config.schedules[schedIndex].startHour = startHour;
+    if (startMinute !== undefined) config.schedules[schedIndex].startMinute = startMinute;
+    if (stopHour !== undefined) config.schedules[schedIndex].stopHour = stopHour;
+    if (stopMinute !== undefined) config.schedules[schedIndex].stopMinute = stopMinute;
+    if (enabled !== undefined) config.schedules[schedIndex].enabled = enabled;
+
+    await config.save();
+    
+    // Broadcast to ESP32
+    if (req.app.locals.mqttClient) {
+      req.app.locals.mqttClient.publish(
+        `greenpulse/control/${device.device_id}`,
+        JSON.stringify({
+          command: "update_schedules",
+          schedules: config.schedules
+        })
+      );
+    }
+    
+    res.json(config.schedules[schedIndex]);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Delete Schedule
+router.delete("/:id/schedules/:schedId", async (req, res) => {
+  try {
+    const mongoose = await import("mongoose");
+    const query = {};
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      query.$or = [{ _id: req.params.id }, { device_id: req.params.id }];
+    } else {
+      query.device_id = req.params.id;
+    }
+
+    const device = await Device.findOne(query);
+    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const config = await DeviceConfiguration.findOne({ device_id: device._id });
+    if (!config) return res.status(404).json({ success: false, message: "Config not found" });
+
+    config.schedules = config.schedules.filter(s => s.schedule_id !== req.params.schedId);
+    await config.save();
+    
+    // Broadcast to ESP32
+    if (req.app.locals.mqttClient) {
+      req.app.locals.mqttClient.publish(
+        `greenpulse/control/${device.device_id}`,
+        JSON.stringify({
+          command: "update_schedules",
+          schedules: config.schedules
+        })
+      );
+    }
+    
+    res.json({ success: true, message: "Schedule deleted" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

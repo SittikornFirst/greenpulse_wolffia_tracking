@@ -57,6 +57,24 @@
               <p class="stat-value">{{ adminStats.activeAlerts }}</p>
             </div>
           </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--success">
+              <CheckCircle :size="24" />
+            </div>
+            <div class="stat-content">
+              <p class="stat-label">Active Devices</p>
+              <p class="stat-value">{{ adminStats.activeDevices }}</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon--warning">
+              <Cpu :size="24" />
+            </div>
+            <div class="stat-content">
+              <p class="stat-label">Inactive Devices</p>
+              <p class="stat-value">{{ adminStats.inactiveDevices }}</p>
+            </div>
+          </div>
         </div>
 
         <div class="activity-section">
@@ -158,7 +176,7 @@
         <Cpu :size="48" />
         <h3>No device is registered for this farm</h3>
         <p>
-          Each farm can host one monitoring device. Add a device to start
+          Add a device to this farm to start
           streaming data.
         </p>
         <router-link to="/devices" class="btn btn--primary">
@@ -307,6 +325,9 @@ export default {
       totalFarms: 0,
       totalDevices: 0,
       activeAlerts: 0,
+      activeDevices: 0,
+      inactiveDevices: 0,
+      recentSensorEvents: 0,
     });
     const lastSensorData = ref([]);
     const deviceActivity = ref([]);
@@ -1116,6 +1137,11 @@ export default {
 .stat-icon--danger {
   background: #fee2e2;
   color: #ef4444;
+}
+
+.stat-icon--warning {
+  background: #fef3c7;
+  color: #d97706;
 }
 
 .stat-content {

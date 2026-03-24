@@ -124,24 +124,29 @@
     </div>
 
     <!-- Pagination -->
-    <div v-if="pagination.pages > 1" class="pagination">
-      <button
-        @click="changePage(pagination.page - 1)"
-        :disabled="pagination.page === 1"
-        class="btn btn--secondary"
-      >
-        Previous
-      </button>
-      <span class="page-info">
-        Page {{ pagination.page }} of {{ pagination.pages }}
-      </span>
-      <button
-        @click="changePage(pagination.page + 1)"
-        :disabled="pagination.page === pagination.pages"
-        class="btn btn--secondary"
-      >
-        Next
-      </button>
+    <div v-if="pagination.pages > 1" class="pagination-container">
+      <div class="pagination-info">
+        Showing <strong>{{ (pagination.page - 1) * pagination.limit + 1 }}</strong>
+        to <strong>{{ Math.min(pagination.page * pagination.limit, pagination.total) }}</strong>
+        of <strong>{{ pagination.total }}</strong> users
+      </div>
+      <div class="pagination-controls">
+        <button
+          @click="changePage(pagination.page - 1)"
+          :disabled="pagination.page === 1 || loading"
+          class="btn btn--secondary btn--sm"
+        >
+          Previous
+        </button>
+        <span class="page-current">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+        <button
+          @click="changePage(pagination.page + 1)"
+          :disabled="pagination.page === pagination.pages || loading"
+          class="btn btn--secondary btn--sm"
+        >
+          Next
+        </button>
+      </div>
     </div>
 
     <!-- Create/Edit Dialog -->
@@ -360,7 +365,7 @@ export default {
         }
 
         const response = await apiService.getUsers(params);
-        users.value = response.data.users;
+        users.value = response.data.data;
         pagination.value = response.data.pagination;
       } catch (err) {
         console.error("Error fetching users:", err);
@@ -482,6 +487,7 @@ export default {
       try {
         await apiService.deleteUser(
           userToDelete.value._id || userToDelete.value.id,
+          true
         );
         showDeleteDialog.value = false;
         userToDelete.value = null;
@@ -512,9 +518,11 @@ export default {
       });
     };
 
-    onMounted(() => {
+    const loadData = () => {
       fetchUsers();
-    });
+    };
+
+    onMounted(loadData);
 
     return {
       users,
@@ -751,17 +759,36 @@ export default {
   color: #dc2626;
 }
 
-.pagination {
+.pagination-container {
+  margin-top: 1.5rem;
+  padding: 1rem 1.5rem;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   align-items: center;
-  gap: 1rem;
-  margin-top: 2rem;
 }
 
-.page-info {
+.pagination-info {
   font-size: 0.875rem;
   color: #6b7280;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.page-current {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.btn--sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
 }
 
 .btn {

@@ -126,9 +126,14 @@ const apiService = {
   },
 
   // ==================== Devices ====================
-  async getDevices(farmId = null) {
-    const params = farmId ? { farmId } : {};
-    return apiClient.get("/devices", { params });
+  async getDevices(params = {}) {
+    const normalizedParams =
+      params && typeof params === "object" && !Array.isArray(params)
+        ? params
+        : params
+          ? { farmId: params }
+          : {};
+    return apiClient.get("/devices", { params: normalizedParams });
   },
 
   async getDevice(deviceId) {
@@ -143,8 +148,8 @@ const apiService = {
     return apiClient.put(`/devices/${deviceId}`, updates);
   },
 
-  async deleteDevice(deviceId) {
-    return apiClient.delete(`/devices/${deviceId}`);
+  async deleteDevice(deviceId, hard = false) {
+    return apiClient.delete(`/devices/${deviceId}${hard ? "?hard=true" : ""}`);
   },
 
   async updateDeviceStatus(deviceId, status) {
@@ -153,6 +158,27 @@ const apiService = {
 
   async updateDeviceConfiguration(deviceId, configData) {
     return apiClient.put(`/devices/${deviceId}/configuration`, configData);
+  },
+
+  // ==================== Relays & Schedules ====================
+  async updateRelay(deviceId, relayId, name) {
+    return apiClient.put(`/devices/${deviceId}/relays/${relayId}`, { name });
+  },
+
+  async toggleRelay(deviceId, relayId, status) {
+    return apiClient.put(`/devices/${deviceId}/relays/${relayId}`, { status });
+  },
+
+  async addSchedule(deviceId, scheduleData) {
+    return apiClient.post(`/devices/${deviceId}/schedules`, scheduleData);
+  },
+
+  async updateSchedule(deviceId, scheduleId, updates) {
+    return apiClient.put(`/devices/${deviceId}/schedules/${scheduleId}`, updates);
+  },
+
+  async deleteSchedule(deviceId, scheduleId) {
+    return apiClient.delete(`/devices/${deviceId}/schedules/${scheduleId}`);
   },
 
   // ==================== Sensor Data ====================
@@ -164,9 +190,9 @@ const apiService = {
   },
 
   async getHistoricalData(deviceId, options = {}) {
-    const { range, startDate, endDate, limit } = options;
+    const { range, startDate, endDate, page, limit } = options;
     return apiClient.get(`/sensor-data/${deviceId}/history`, {
-      params: { range, startDate, endDate, limit },
+      params: { range, startDate, endDate, page, limit },
     });
   },
 
@@ -220,8 +246,8 @@ const apiService = {
   },
 
   // ==================== Farms ====================
-  async getFarms() {
-    return apiClient.get("/farms");
+  async getFarms(params = {}) {
+    return apiClient.get("/farms", { params });
   },
 
   async getFarm(farmId) {
@@ -236,8 +262,8 @@ const apiService = {
     return apiClient.put(`/farms/${farmId}`, updates);
   },
 
-  async deleteFarm(farmId) {
-    return apiClient.delete(`/farms/${farmId}`);
+  async deleteFarm(farmId, hard = false) {
+    return apiClient.delete(`/farms/${farmId}${hard ? "?hard=true" : ""}`);
   },
 
   async getFarmDevices(farmId) {
@@ -319,8 +345,8 @@ const apiService = {
     return apiClient.put(`/users/${userId}`, updates);
   },
 
-  async deleteUser(userId) {
-    return apiClient.delete(`/users/${userId}`);
+  async deleteUser(userId, hard = false) {
+    return apiClient.delete(`/users/${userId}${hard ? "?hard=true" : ""}`);
   },
 
   async toggleUserStatus(userId) {
