@@ -82,9 +82,13 @@
           <div class="activity-grid">
             <div class="activity-card">
               <h3>Recent Sensor Data</h3>
-              <div v-if="lastSensorData.length === 0" class="empty-state">
-                <p>No sensor data received yet</p>
-              </div>
+              <EmptyState
+                v-if="lastSensorData.length === 0"
+                type="no-data"
+                title="No sensor data"
+                description="No sensor data received yet"
+                :compact="true"
+              />
               <div v-else class="activity-list">
                 <div
                   v-for="(data, index) in lastSensorData.slice(0, 5)"
@@ -104,9 +108,13 @@
 
             <div class="activity-card">
               <h3>Device Activity Status</h3>
-              <div v-if="deviceActivity.length === 0" class="empty-state">
-                <p>No device activity</p>
-              </div>
+              <EmptyState
+                v-if="deviceActivity.length === 0"
+                type="no-data"
+                title="No device activity"
+                description="No device activity recorded"
+                :compact="true"
+              />
               <div v-else class="activity-list">
                 <div
                   v-for="(device, index) in deviceActivity.slice(0, 5)"
@@ -277,10 +285,13 @@
             <router-link to="/alerts" class="link">View All</router-link>
           </div>
 
-          <div v-if="recentAlerts.length === 0" class="empty-state">
-            <CheckCircle :size="48" class="empty-state__icon" />
-            <p>No active alerts. All systems operating normally.</p>
-          </div>
+          <EmptyState
+              v-if="recentAlerts.length === 0"
+              type="no-data"
+              title="All Clear"
+              description="No active alerts. All systems operating normally."
+              :compact="true"
+            />
 
           <div v-else class="alerts-list">
             <AlertItem
@@ -311,12 +322,13 @@ import { useSensorDataStore } from "@/stores/module/sensorData";
 import { useDevicesStore } from "@/stores/module/devices";
 import { useAlertsStore } from "@/stores/module/alerts";
 import { useFarmsStore } from "@/stores/module/farms";
-import websocketService from "@/services/websocket";
-import apiService from "@/services/api";
+import { useWebSocket } from "@/composables/useWebSocket";
+import { THRESHOLDS, updateThresholdsFromConfig } from "@/utils/thresholds";
+import { getTimeAgo } from "@/utils/sensorHelpers";
 import MetricCard from "@/components/Dashboard/MetricCard.vue";
 import ChartCard from "@/components/Dashboard/ChartCard.vue";
+import EmptyState from "@/components/Common/EmptyState.vue";
 import AlertItem from "@/components/Alerts/AlertItem.vue";
-import { updateThresholdsFromConfig, THRESHOLDS } from "@/utils/thresholds";
 
 export default {
   name: "DashboardView",
@@ -330,6 +342,7 @@ export default {
     MetricCard,
     ChartCard,
     AlertItem,
+    EmptyState,
   },
   setup() {
     const sensorDataStore = useSensorDataStore();

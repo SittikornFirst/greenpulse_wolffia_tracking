@@ -89,91 +89,12 @@
 
     <!-- Devices Grid -->
     <div v-else class="devices-grid">
-      <div
+      <DeviceCard
         v-for="device in filteredDevices"
         :key="device.id"
-        class="device-card"
+        :device="device"
         @click="goToDeviceDetails(device.id)"
-      >
-        <div class="device-header">
-          <div class="device-icon device-icon--generic">
-            <component :is="getDeviceIcon(device.device_type)" :size="24" />
-          </div>
-          <div class="device-status">
-            <span
-              :class="['status-dot', `status-dot--${device.status}`]"
-            ></span>
-            <span class="status-text">{{ device.status }}</span>
-          </div>
-        </div>
-
-        <div class="device-body">
-          <h3 class="device-name">{{ device.device_name }}</h3>
-          <p class="device-type">{{ device.farmName || "Unassigned" }}</p>
-
-          <div class="device-info">
-            <div class="info-item">
-              <span class="info-label">Device ID:</span>
-              <span class="info-value">{{ device.device_id }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Location:</span>
-              <span class="info-value">{{
-                device.location || "Not specified"
-              }}</span>
-            </div>
-            <div class="info-item">
-              <span class="info-label">Last Update:</span>
-              <span class="info-value">{{
-                formatTime(device.lastActivity || device.updatedAt)
-              }}</span>
-            </div>
-          </div>
-
-          <div v-if="device.configuration" class="config-summary">
-            <div class="config-row">
-              <span class="config-label">Sampling Interval</span>
-              <span class="config-value"
-                >{{ device.configuration.sampling_interval }}s</span
-              >
-            </div>
-          </div>
-        </div>
-
-        <div class="device-footer">
-          <button
-            @click.stop="openConfigModal(device)"
-            class="btn btn-secondary btn-sm"
-          >
-            <Settings :size="16" />
-            <span>View Config</span>
-          </button>
-          <button
-            @click.stop="handleToggleDeviceStatus(device)"
-            :class="[
-              'btn',
-              'btn-sm',
-              device.status === 'inactive' ? 'btn-success' : 'btn-warning',
-            ]"
-          >
-            <component
-              :is="device.status === 'inactive' ? CheckCircle : XCircle"
-              :size="16"
-            />
-            <span>{{
-              device.status === "inactive" ? "Activate" : "Deactivate"
-            }}</span>
-          </button>
-          <button
-            v-if="device.status === 'inactive'"
-            @click.stop="handleArchiveDevice(device)"
-            class="btn btn-danger btn-sm"
-          >
-            <Trash2 :size="16" />
-            <span>Archive</span>
-          </button>
-        </div>
-      </div>
+      />
     </div>
     
     <!-- Pagination -->
@@ -384,6 +305,8 @@ import {
 import { useDevicesStore } from "@/stores/module/devices";
 import { useFarmsStore } from "@/stores/module/farms";
 import apiService from "@/services/api";
+import DeviceCard from "@/components/Devices/DeviceCard.vue";
+import AddDeviceForm from "@/components/Devices/AddDeviceForm.vue";
 
 export default {
   name: "DevicesView",
@@ -402,6 +325,8 @@ export default {
     Trash2,
     X,
     MapPin,
+    DeviceCard,
+    AddDeviceForm,
   },
   setup() {
     const route = useRoute();
