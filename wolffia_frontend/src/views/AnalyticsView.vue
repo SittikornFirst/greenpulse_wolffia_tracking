@@ -7,20 +7,13 @@
       </div>
       <div class="header-actions">
         <div class="control-group">
-          <div class="device-selector" v-if="hasDevices">
-            <label for="analytics-device">Device</label>
-            <div class="select-wrapper">
-              <select id="analytics-device" v-model="selectedDeviceId">
-                <option
-                  v-for="device in devices"
-                  :key="device._id || device.device_id"
-                  :value="device.device_id"
-                >
-                  {{ device.device_name }}
-                </option>
-              </select>
-            </div>
-          </div>
+          <DeviceSelector
+            v-if="hasDevices"
+            v-model="selectedDeviceId"
+            label="Device"
+            :show-placeholder="true"
+            placeholder="Select a device..."
+          />
           <div class="entries-selector">
             <label for="analytics-time">Time Range</label>
             <div class="select-wrapper">
@@ -31,7 +24,6 @@
                 <option value="7d">7 Days</option>
                 <option value="30d">30 Days</option>
                 <option value="1y">1 Year</option>
-                <option value="all">All</option>
               </select>
             </div>
           </div>
@@ -48,11 +40,7 @@
             </div>
           </div>
         </div>
-        <button
-          @click="refreshData"
-          :disabled="loading"
-          class="btn btn-primary refresh-btn"
-        >
+        <button @click="refreshData" :disabled="loading" class="btn btn-primary refresh-btn">
           <RefreshCw :size="18" :class="{ spin: loading }" />
           <span>Refresh</span>
         </button>
@@ -63,15 +51,10 @@
       <Cpu :size="56" />
       <h3>No devices yet</h3>
       <p>Add a device to view analytics.</p>
-      <router-link to="/devices" class="btn btn-primary"
-        >Add Device</router-link
-      >
+      <router-link to="/devices" class="btn btn-primary">Add Device</router-link>
     </div>
 
-    <div
-      v-else-if="hasDevices && tableRows.length === 0"
-      class="analytics-empty"
-    >
+    <div v-else-if="hasDevices && tableRows.length === 0" class="analytics-empty">
       <Activity :size="48" />
       <h3>No data available</h3>
       <p>This device has no sensor data yet. Waiting for readings...</p>
@@ -84,6 +67,8 @@
           :key="metric.id"
           :title="metric.title"
           :value="metric.value"
+          :valueMin="metric.valueMin"
+          :valueMax="metric.valueMax"
           :unit="metric.unit"
           :icon="metric.icon"
           :status="metric.status"
@@ -93,9 +78,43 @@
         />
       </div>
 
-      <div class="data-table-section">
-        <div class="table-header">
-          <h2>Recent Readings</h2>
+      <DataTable
+        :columns="tableColumns"
+        :data="tableRows"
+        :loading="loading"
+        title="Recent Readings"
+        :subtitle="`Showing latest ${tableRows.length} entries`"
+        :pagination="true"
+        :page-size="entriesPerPage"
+      >
+        <template #cell-timestamp="{ value }">
+          {{ formatTimestamp(value) }}
+        </template>
+        <template #cell-ph="{ value }">
+          <span :style="{ color: getValueColor('ph_value', value) }">{{ formatValue(value) }}</span>
+        </template>
+        <template #cell-temperature_water_c="{ value }">
+          <span :style="{ color: getValueColor('water_temperature_c', value) }">{{ formatValue(value) }}</span>
+        </template>
+        <template #cell-temperature_air_c="{ value }">
+          <span :style="{ color: getValueColor('air_temperature_c', value) }">{{ formatValue(value) }}</span>
+        </template>
+        <template #cell-humidity="{ value }">
+          <span :style="{ color: getValueColor('air_humidity', value) }">{{ formatValue(value) }}</span>
+        </template>
+        <template #cell-ec="{ value }">
+          <span :style="{ color: getValueColor('ec_value', value) }">{{ formatValue(value) }}</span>
+        </template>
+        <template #cell-tds="{ value }">
+          <span :style="{ color: getValueColor('tds_value', value) }">{{ formatInteger(value) }}</span>
+        </template>
+        <template #cell-light_intensity="{ value }">
+          <span :style="{ color: getValueColor('light_intensity', value) }">{{ formatInteger(value) }}</span>
+        </template>
+      </DataTable>
+    </template>
+  </div>
+</template>
           <span class="table-subtitle"
             >Showing latest {{ tableRows.length }} entries</span
           >
@@ -243,6 +262,7 @@ import {
   Sun,
   Activity,
 } from "lucide-vue-next";
+import apiService from "@/services/api";
 import { useSensorDataStore } from "@/stores/module/sensorData";
 import { useDevicesStore } from "@/stores/module/devices";
 import { useFarmsStore } from "@/stores/module/farms";
@@ -253,6 +273,8 @@ import {
   updateThresholdsFromConfig,
 } from "@/utils/thresholds";
 import MetricCard from "@/components/Dashboard/MetricCard.vue";
+import DeviceSelector from "@/components/Common/DeviceSelector.vue";
+import DataTable from "@/components/Common/DataTable.vue";
 
 export default {
   name: "AnalyticsView",
@@ -260,7 +282,13 @@ export default {
     RefreshCw,
     MapPin,
     Cpu,
+    Droplet,
+    Thermometer,
+    Sun,
+    Activity,
     MetricCard,
+    DeviceSelector,
+    DataTable,
   },
   setup() {
     const sensorDataStore = useSensorDataStore();
@@ -275,6 +303,7 @@ export default {
     const totalPages = ref(1);
     const timeRange = ref("24h");
     const selectedDeviceId = ref(null);
+    const minMaxData = ref(null);
 
     const devices = computed(() => devicesStore.devices);
     const hasDevices = computed(() => devices.value.length > 0);
@@ -365,12 +394,17 @@ export default {
       };
 
       const formatAvg = (key, avgVal) => {
-        if (avgVal === null) return "--";
+        if (avgVal === null || avgVal === undefined) return "--";
         return key === "ph_value" || key === "ec_value"
-          ? avgVal.toFixed(2)
+          ? Number(avgVal).toFixed(2)
           : key.includes("temperature") || key === "humidity"
-            ? avgVal.toFixed(1)
+            ? Number(avgVal).toFixed(1)
             : Math.round(avgVal).toLocaleString();
+      };
+      
+      const getStat = (key, type) => {
+        if (!minMaxData.value) return null;
+        return minMaxData.value[`${key}_${type}`];
       };
 
       const avgPh = avg("ph");
@@ -385,7 +419,9 @@ export default {
         {
           id: "ph",
           title: "Avg pH",
-          value: formatAvg("ph_value", avgPh),
+          value: formatAvg("ph_value", getStat('ph', 'avg') ?? avgPh),
+          valueMin: getStat('ph', 'min'),
+          valueMax: getStat('ph', 'max'),
           unit: "pH",
           icon: "Droplet",
           status: getValueStatus("ph_value", avgPh),
@@ -395,7 +431,9 @@ export default {
         {
           id: "water_temp",
           title: "Avg Water Temp",
-          value: formatAvg("temperature", avgWaterTemp),
+          value: formatAvg("temperature", getStat('water_temp', 'avg') ?? avgWaterTemp),
+          valueMin: getStat('water_temp', 'min'),
+          valueMax: getStat('water_temp', 'max'),
           unit: "°C",
           icon: "Thermometer",
           status: getValueStatus("water_temperature_c", avgWaterTemp),
@@ -405,7 +443,9 @@ export default {
         {
           id: "air_temp",
           title: "Avg Air Temp",
-          value: formatAvg("temperature", avgAirTemp),
+          value: formatAvg("temperature", getStat('air_temp', 'avg') ?? avgAirTemp),
+          valueMin: getStat('air_temp', 'min'),
+          valueMax: getStat('air_temp', 'max'),
           unit: "°C",
           icon: "Thermometer",
           status: getValueStatus("air_temperature_c", avgAirTemp),
@@ -415,7 +455,9 @@ export default {
         {
           id: "humidity",
           title: "Avg Air Humidity",
-          value: formatAvg("humidity", avgHumidity),
+          value: formatAvg("humidity", getStat('humidity', 'avg') ?? avgHumidity),
+          valueMin: getStat('humidity', 'min'),
+          valueMax: getStat('humidity', 'max'),
           unit: "%",
           icon: "Droplet",
           status: getValueStatus("air_humidity", avgHumidity),
@@ -425,7 +467,9 @@ export default {
         {
           id: "ec",
           title: "Avg EC",
-          value: formatAvg("ec_value", avgEc),
+          value: formatAvg("ec_value", getStat('ec', 'avg') ?? avgEc),
+          valueMin: getStat('ec', 'min'),
+          valueMax: getStat('ec', 'max'),
           unit: "mS/cm",
           icon: "Activity",
           status: getValueStatus("ec_value", avgEc),
@@ -435,7 +479,9 @@ export default {
         {
           id: "tds",
           title: "Avg TDS",
-          value: formatAvg("tds_value", avgTds),
+          value: formatAvg("tds_value", getStat('tds', 'avg') ?? avgTds),
+          valueMin: getStat('tds', 'min'),
+          valueMax: getStat('tds', 'max'),
           unit: "ppm",
           icon: "Activity",
           status: getValueStatus("tds_value", avgTds),
@@ -445,7 +491,9 @@ export default {
         {
           id: "light",
           title: "Avg Light",
-          value: formatAvg("light_intensity", avgLight),
+          value: formatAvg("light_intensity", getStat('light', 'avg') ?? avgLight),
+          valueMin: getStat('light', 'min'),
+          valueMax: getStat('light', 'max'),
           unit: "lux",
           icon: "Sun",
           status: getValueStatus("light_intensity", avgLight),
@@ -456,6 +504,17 @@ export default {
     });
 
     const tableRows = computed(() => allTableRows.value);
+
+    const tableColumns = [
+      { key: "timestamp", label: "Timestamp", sortable: true },
+      { key: "ph", label: "pH", sortable: true },
+      { key: "temperature_water_c", label: "Water Temp (°C)", sortable: true },
+      { key: "temperature_air_c", label: "Air Temp (°C)", sortable: true },
+      { key: "humidity", label: "Humidity (%)", sortable: true },
+      { key: "ec", label: "EC (mS/cm)", sortable: true },
+      { key: "tds", label: "TDS (ppm)", sortable: true },
+      { key: "light_intensity", label: "Light (lux)", sortable: true },
+    ];
 
     const visiblePages = computed(() => {
       const pages = [];
@@ -569,6 +628,7 @@ export default {
       totalPages,
       totalEntries,
       metricCards,
+      tableColumns,
       tableRows,
       visiblePages,
       allTableRows,

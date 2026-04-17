@@ -137,12 +137,6 @@
                 >{{ device.configuration.sampling_interval }}s</span
               >
             </div>
-            <div class="config-row">
-              <span class="config-label">MQTT Topic</span>
-              <span class="config-value">{{
-                device.configuration.mqtt_topic
-              }}</span>
-            </div>
           </div>
         </div>
 
@@ -275,20 +269,12 @@
               <CheckCircle :size="48" color="#10b981" />
             </div>
             <h3>Device Registered Successfully!</h3>
-            <p>Please copy these credentials into your ESP32 Arduino code to authenticate:</p>
+            <p>Please update your ESP32 Arduino code with this Device ID:</p>
             
             <div class="credentials-box">
               <div class="credential-item">
-                <span class="cred-label">Device ID (for Greenpulse payload):</span>
+                <span class="cred-label">Device ID (Update your DEVICE_ID variable):</span>
                 <code class="cred-value">{{ newlyCreatedDevice.device_id }}</code>
-              </div>
-              <div class="credential-item">
-                <span class="cred-label">MQTT Control Topic (Subscribe):</span>
-                <code class="cred-value">greenpulse/control/{{ newlyCreatedDevice.device_id }}</code>
-              </div>
-              <div class="credential-item">
-                <span class="cred-label">MQTT Telemetry Topic (Publish):</span>
-                <code class="cred-value">greenpulse/sensors</code>
               </div>
             </div>
 
@@ -318,12 +304,6 @@
         <div class="modal-body config-modal-body">
           <p class="config-device-title">{{ configDevice.device_name }}</p>
           <div v-if="configDevice.configuration" class="config-grid">
-            <div class="config-field">
-              <span class="config-label">MQTT Topic</span>
-              <span class="config-value">{{
-                configDevice.configuration.mqtt_topic
-              }}</span>
-            </div>
             <div class="config-field">
               <span class="config-label">Sampling Interval</span>
               <span class="config-value"
@@ -470,10 +450,26 @@ export default {
       const then = new Date(timestamp);
       const diffMins = Math.floor((now - then) / 60000);
 
-      if (diffMins < 1) return "Just now";
-      if (diffMins < 60) return `${diffMins}m ago`;
-      if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-      return then.toLocaleDateString();
+      const timestampStr = then.toLocaleString('en-US', { 
+        month: 'short', day: 'numeric', 
+        hour: '2-digit', minute: '2-digit', hour12: false 
+      });
+
+      if (diffMins < 1) return `Just now (${timestampStr})`;
+      
+      let relativeStr = '';
+      if (diffMins < 60) {
+        relativeStr = `${diffMins}m ago`;
+      } else if (diffMins < 1440) {
+        const hours = Math.floor(diffMins / 60);
+        const mins = diffMins % 60;
+        relativeStr = mins > 0 ? `${hours}h ${mins}m ago` : `${hours}h ago`;
+      } else {
+        const days = Math.floor(diffMins / 1440);
+        relativeStr = `${days}d ago`;
+      }
+      
+      return `${relativeStr} (${timestampStr})`;
     };
 
     const goToDeviceDetails = (deviceId) => {

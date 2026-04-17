@@ -2,6 +2,7 @@ import express from "express";
 import Farm from "../models/Farm.js";
 import Device from "../models/Device.js";
 import { authenticate, authorize } from "../middleware/auth.js";
+import { auditLog } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -138,6 +139,15 @@ router.post("/", async (req, res) => {
     const farm = new Farm(farmData);
     await farm.save();
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Farm",
+      target_id: farm._id,
+      action_type: "CREATE",
+      event: "Farm Created",
+      message: `User ${req.user.email} created farm '${farm.farm_name}'.`
+    });
+
     res.status(201).json(farm);
   } catch (error) {
     // Handle duplicate key error explicitly just in case race condition
@@ -194,6 +204,15 @@ router.put("/:id", async (req, res) => {
       },
     );
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Farm",
+      target_id: farmUpdated._id,
+      action_type: "UPDATE",
+      event: "Farm Updated",
+      message: `User ${req.user.email} updated farm '${farmUpdated.farm_name}'.`
+    });
+
     res.json(farmUpdated);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -236,6 +255,15 @@ router.delete("/:id", async (req, res) => {
     } else {
       await Farm.findByIdAndUpdate(req.params.id, { is_deleted: true });
     }
+
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Farm",
+      target_id: farm._id,
+      action_type: "DELETE",
+      event: "Farm Deleted",
+      message: `User ${req.user.email} deleted farm '${farm.farm_name}'.`
+    });
 
     res.json({ success: true, message: req.query.hard === "true" ? "Farm permanently deleted" : "Farm deleted" });
   } catch (error) {

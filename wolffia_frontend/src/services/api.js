@@ -212,6 +212,12 @@ const apiService = {
     });
   },
 
+  async getActivityLog(params = {}) {
+    // Note: This endpoint is not implemented on the backend
+    // Using /sensor-data endpoint as alternative with proper params
+    return apiClient.get("/sensor-data", { params });
+  },
+
   // ==================== Alerts ====================
   async getAlerts(params = {}) {
     return apiClient.get("/alerts", { params });
@@ -315,6 +321,10 @@ const apiService = {
     });
   },
 
+  async getSensorMinMax(deviceId, params = {}) {
+    return apiClient.get(`/analytics/min-max/${deviceId}`, { params });
+  },
+
   // ==================== Notifications ====================
   async getNotificationSettings() {
     return apiClient.get("/notifications/settings");
@@ -356,6 +366,11 @@ const apiService = {
   // ==================== Admin Analytics ====================
   async getAdminStats() {
     return apiClient.get("/analytics/admin/stats");
+  },
+
+  // ==================== System Logs ====================
+  async getSystemLogs(params = {}) {
+    return apiClient.get("/system-logs", { params });
   },
 };
 

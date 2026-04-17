@@ -5,6 +5,7 @@ import Farm from "../models/Farm.js";
 import DeviceConfiguration from "../models/DeviceConfiguration.js";
 import SystemLog from "../models/SystemLog.js";
 import { authenticate } from "../middleware/auth.js";
+import { auditLog } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -168,7 +169,6 @@ router.post("/", async (req, res) => {
     // 4. Create Default Configuration
     const config = await DeviceConfiguration.create({
       device_id: device._id,
-      mqtt_topic: req.body.mqtt_topic || `devices/${device.device_id}/data`,
       alert_enabled: req.body.alert_enabled ?? true,
       sampling_interval: req.body.sampling_interval || 300,
       ph_min: 6.0,
@@ -190,21 +190,16 @@ router.post("/", async (req, res) => {
       .populate("farm_id", "farm_name location")
       .populate("config_id");
 
-    if (req.app.locals.mqttClient) {
-      req.app.locals.mqttClient.publish(
-        `greenpulse/register/${device.device_id}`,
-        JSON.stringify({
-          event: "device_registered",
-          device_id: device.device_id,
-          device_name: device.device_name,
-          control_topic: `greenpulse/control/${device.device_id}`,
-          telemetry_topic: "greenpulse/sensors",
-          phtds_topic: "greenpulse/phtds",
-          config_topic: `greenpulse/register/${device.device_id}`,
-        }),
-        { retain: true }
-      );
-    }
+
+
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Device",
+      target_id: device._id,
+      action_type: "CREATE",
+      event: "Device Created",
+      message: `${req.user.role === 'admin' ? 'Admin' : 'User'} ${req.user.email} registered device '${device.device_name}'.`
+    });
 
     res.status(201).json(hydratedDevice);
   } catch (error) {
@@ -269,6 +264,15 @@ router.put("/:id", async (req, res) => {
         .json({ success: false, message: "Device not found" });
     }
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Device",
+      target_id: device._id,
+      action_type: "UPDATE",
+      event: "Device Updated",
+      message: `${req.user.role === 'admin' ? 'Admin' : 'User'} ${req.user.email} updated device '${device.device_name}'.`
+    });
+
     res.json(device);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -303,6 +307,15 @@ router.patch("/:id/status", async (req, res) => {
         .status(404)
         .json({ success: false, message: "Device not found" });
     }
+
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Device",
+      target_id: device._id,
+      action_type: "UPDATE",
+      event: `Device Status ${status}`,
+      message: `${req.user.role === 'admin' ? 'Admin' : 'User'} ${req.user.email} changed device '${device.device_name}' status to ${status}.`
+    });
 
     res.json(device);
   } catch (error) {
@@ -340,13 +353,14 @@ router.put("/:id/configuration", async (req, res) => {
     await device.save();
 
     // Log the configuration change
-    await SystemLog.create({
+    await auditLog({
+      user_id: req.user._id,
       device_id: device._id,
-      config_id: config._id,
-      log_type: "INFO",
+      target_type: "DeviceConfiguration",
+      target_id: config._id,
+      action_type: "UPDATE",
       event: "CONFIG_UPDATE",
-      message: "Device configuration updated",
-      metadata: { updated_fields: Object.keys(req.body) },
+      message: `${req.user.role === 'admin' ? 'Admin' : 'User'} ${req.user.email} updated configuration for device '${device.device_name}'.`
     });
 
     res.json(config);
@@ -390,6 +404,15 @@ router.delete("/:id", async (req, res) => {
         .json({ success: false, message: "Device not found" });
     }
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "Device",
+      target_id: req.params.id,
+      action_type: "DELETE",
+      event: "Device Deleted",
+      message: `${req.user.role === 'admin' ? 'Admin' : 'User'} ${req.user.email} ${req.query.hard === "true" ? "permanently deleted" : "soft deleted"} device.`
+    });
+
     res.json({ success: true, message: req.query.hard === "true" ? "Device permanently deleted" : "Device deleted" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -426,18 +449,7 @@ router.put("/:id/relays/:relayId", async (req, res) => {
     
     await config.save();
 
-    // Broadcast to ESP32
-    if (req.app.locals.mqttClient) {
-      req.app.locals.mqttClient.publish(
-        `greenpulse/control/${device.device_id}`,
-        JSON.stringify({
-          command: "update_relay",
-          relay: relayId,
-          name: config.relays[relayIndex].name,
-          status: config.relays[relayIndex].status
-        })
-      );
-    }
+
 
     res.json(config.relays[relayIndex]);
   } catch (error) {
@@ -480,16 +492,7 @@ router.post("/:id/schedules", async (req, res) => {
     config.schedules.push(newSchedule);
     await config.save();
     
-    // Broadcast to ESP32
-    if (req.app.locals.mqttClient) {
-      req.app.locals.mqttClient.publish(
-        `greenpulse/control/${device.device_id}`,
-        JSON.stringify({
-          command: "update_schedules",
-          schedules: config.schedules
-        })
-      );
-    }
+
     
     res.status(201).json(newSchedule);
   } catch (error) {
@@ -529,16 +532,7 @@ router.put("/:id/schedules/:schedId", async (req, res) => {
 
     await config.save();
     
-    // Broadcast to ESP32
-    if (req.app.locals.mqttClient) {
-      req.app.locals.mqttClient.publish(
-        `greenpulse/control/${device.device_id}`,
-        JSON.stringify({
-          command: "update_schedules",
-          schedules: config.schedules
-        })
-      );
-    }
+
     
     res.json(config.schedules[schedIndex]);
   } catch (error) {
@@ -566,16 +560,7 @@ router.delete("/:id/schedules/:schedId", async (req, res) => {
     config.schedules = config.schedules.filter(s => s.schedule_id !== req.params.schedId);
     await config.save();
     
-    // Broadcast to ESP32
-    if (req.app.locals.mqttClient) {
-      req.app.locals.mqttClient.publish(
-        `greenpulse/control/${device.device_id}`,
-        JSON.stringify({
-          command: "update_schedules",
-          schedules: config.schedules
-        })
-      );
-    }
+
     
     res.json({ success: true, message: "Schedule deleted" });
   } catch (error) {

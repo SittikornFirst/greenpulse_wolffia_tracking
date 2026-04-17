@@ -2,11 +2,9 @@ import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
-import mqtt from "mqtt";
 import helmet from "helmet";
 import jwt from "jsonwebtoken";
 import dns from "dns";
-import crypto from "crypto";
 
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
@@ -17,12 +15,11 @@ import alertRoutes from "./routes/alerts.js";
 import farmRoutes from "./routes/farms.js";
 import analyticsRoutes from "./routes/analytics.js";
 import userRoutes from "./routes/users.js";
+import systemLogRoutes from "./routes/systemLogs.js";
 
 import rateLimit from "express-rate-limit";
-import SensorData from "./models/SensorData.js";
 import Device from "./models/Device.js";
-import Alert from "./models/Alert.js";
-import DeviceConfiguration from "./models/DeviceConfiguration.js";
+
 
 dotenv.config();
 
@@ -67,6 +64,7 @@ app.use("/api/alerts", alertRoutes);
 app.use("/api/farms", farmRoutes);
 app.use("/api/analytics", analyticsRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/system-logs", systemLogRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -85,6 +83,16 @@ app.use((err, req, res, next) => {
 // Create HTTP server
 const server = createServer(app);
 
+// Helper for formatted websocket logging
+const getWsTimestamp = () => {
+  const d = new Date();
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+};
+const wsLog = (level, message) => {
+  console.log(`[${getWsTimestamp()}] ${level.padEnd(5)} - ${message}`);
+};
+
 // WebSocket Server
 const wss = new WebSocketServer({ server, path: "/ws" });
 const clients = new Map();
@@ -92,12 +100,15 @@ const clients = new Map();
 wss.on("connection", (ws, req) => {
   const clientId = Math.random().toString(36).substring(7);
   clients.set(clientId, ws);
-  console.log(`WebSocket client connected: ${clientId}`);
+  
+  wsLog('INFO', `Handshake request: ws://${req.headers.host}${req.url}`);
+  wsLog('INFO', `Handshake response: 101 Switching Protocols`);
+  wsLog('INFO', `Channel Registered: [Client_ID: ${clientId}, IP: ${req.socket.remoteAddress}]`);
 
   ws.on("message", (message) => {
+    wsLog('DEBUG', `Inbound Frame (Text): ${message}`);
     try {
       const data = JSON.parse(message);
-      console.log("Received:", data);
 
       // Handle subscription messages
       if (data.type === "subscribe" && data.deviceId) {
@@ -109,9 +120,9 @@ wss.on("connection", (ws, req) => {
         try {
           const decoded = jwt.verify(data.data.token, process.env.JWT_SECRET);
           ws.userId = decoded.userId; // Store user ID on the connection
-          console.log(`✅ WebSocket authenticated for User ID: ${ws.userId}`);
+          wsLog('INFO', `WebSocket authenticated for User ID: ${ws.userId}`);
         } catch (err) {
-          console.error("❌ WebSocket authentication failed:", err.message);
+          wsLog('ERROR', `WebSocket authentication failed: ${err.message}`);
         }
       }
     } catch (error) {
@@ -121,7 +132,7 @@ wss.on("connection", (ws, req) => {
 
   ws.on("close", () => {
     clients.delete(clientId);
-    console.log(`WebSocket client disconnected: ${clientId}`);
+    wsLog('INFO', `Channel Unregistered: [Client_ID: ${clientId}, Reason: Closed]`);
   });
 
   ws.on("error", (error) => {
@@ -134,7 +145,9 @@ wss.on("connection", (ws, req) => {
 export const broadcastToDevice = (deviceId, data) => {
   clients.forEach((client, id) => {
     if (client.readyState === 1 && client.deviceId === deviceId) {
-      client.send(JSON.stringify(data));
+      const payload = JSON.stringify(data);
+      wsLog('DEBUG', `Outbound Frame (Text): ${payload}`);
+      client.send(payload);
     }
   });
 };
@@ -144,7 +157,9 @@ export const broadcastToUser = (userId, data) => {
   if (!userId) return;
   clients.forEach((client) => {
     if (client.readyState === 1 && client.userId === userId.toString()) {
-      client.send(JSON.stringify(data));
+      const payload = JSON.stringify(data);
+      wsLog('DEBUG', `Outbound Frame (Text): ${payload}`);
+      client.send(payload);
     }
   });
 };
@@ -184,222 +199,4 @@ mongoose
     console.error("❌ MongoDB connection error:", error);
     process.exit(1);
   });
-
-// MQTT Client Setup
-const mqttUrl = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
-const mqttClient = mqtt.connect(mqttUrl);
-app.locals.mqttClient = mqttClient;
-
-mqttClient.on("connect", () => {
-  console.log("✅ Connected to MQTT broker:", mqttUrl);
-  mqttClient.subscribe("devices/+/sensor", { qos: 1 });
-  mqttClient.subscribe("greenpulse/sensors", { qos: 1 });
-  mqttClient.subscribe("greenpulse/phtds", { qos: 1 });
-});
-
-mqttClient.on("message", async (topic, payload) => {
-  try {
-    const data = JSON.parse(payload.toString());
-
-    let device;
-    let deviceIdFromTopic;
-    if (topic === "greenpulse/sensors" || topic === "greenpulse/phtds") {
-      deviceIdFromTopic = (data.device_id || data.deviceId || "").toUpperCase();
-      device = await Device.findOne({ device_id: deviceIdFromTopic });
-    } else {
-      const topicParts = topic.split("/");
-      deviceIdFromTopic = (topicParts[1] || "").toUpperCase(); // devices/:id/sensor
-      device = await Device.findOne({ device_id: deviceIdFromTopic });
-    }
-
-    console.log(`📡 MQTT Message from ${deviceIdFromTopic}:`, data);
-
-    if (!device) {
-      console.warn(
-        `⚠️ Received data but no active device found. Topic: ${topic}`,
-      );
-      return;
-    }
-
-    // Helper to safely extract values from various possible payload formats
-    const getPh = (d) =>
-      d.ph?.val ?? (typeof d.ph === "number" ? d.ph : undefined);
-    const getEc = (d) => d.tds?.ec ?? d.ec_ms ?? d.ec;
-    const getTds = (d) =>
-      d.tds?.ppm ??
-      d.tds_ppm ??
-      (typeof d.tds === "number" ? d.tds : undefined);
-    const getWater = (d) => d.water_c ?? d.water_temp;
-    const getAir = (d) => d.air_c ?? d.air_temp;
-    const getHum = (d) => d.hum ?? d.humidity;
-    const getLux = (d) => d.lux ?? d.light_lux ?? d.light;
-
-    // Save Sensor Data
-    try {
-      const latestReading = await SensorData.findOne({
-        device_id: device.device_id,
-      }).sort({ created_at: -1 });
-
-      const fallbackReading = latestReading || {};
-      const nextPh = getPh(data);
-      const nextEc = getEc(data);
-      const nextTds = getTds(data);
-
-      const newSensorData = new SensorData({
-        device_id: device.device_id, // Use the string ID, not MongoDB _id
-        data_id: crypto.randomUUID(), // <-- NEW: Required by SensorData schema
-        ph_value: nextPh ?? fallbackReading.ph_value,
-        ec_value:
-          nextEc ??
-          (nextTds !== undefined
-            ? Number((nextTds * 0.0005).toFixed(3))
-            : fallbackReading.ec_value),
-        tds_value:
-          nextTds ??
-          (nextEc !== undefined
-            ? Number((nextEc / 0.0005).toFixed(0))
-            : fallbackReading.tds_value),
-        water_temperature_c: getWater(data) ?? fallbackReading.water_temperature_c,
-        air_temperature_c: getAir(data) ?? fallbackReading.air_temperature_c,
-        air_humidity: getHum(data) ?? fallbackReading.air_humidity,
-        light_intensity: getLux(data) ?? fallbackReading.light_intensity,
-        timestamp: new Date(),
-      });
-
-      await newSensorData.save();
-      console.log("💾 Sensor data saved");
-    } catch (saveErr) {
-      console.error("❌ Failed to save SensorData to DB:", saveErr.message);
-    }
-
-    device.last_activity = new Date();
-    await device.save();
-
-    // Process relay status updates if present from ESP32 payload
-    if (data.relays && Array.isArray(data.relays) && device.config_id) {
-      try {
-        const config = await DeviceConfiguration.findById(device.config_id);
-        if (config && config.relays) {
-          let relaysChanged = false;
-          data.relays.forEach((state, i) => {
-            if (i < config.relays.length) {
-              const newStatus = Boolean(state);
-              if (config.relays[i].status !== newStatus) {
-                config.relays[i].status = newStatus;
-                relaysChanged = true;
-              }
-            }
-          });
-          if (relaysChanged) {
-            await config.save();
-            console.log(`🔌 Relay states updated for device ${deviceIdFromTopic}`);
-          }
-        }
-      } catch (relayErr) {
-        console.error("❌ Failed to update Relay states in DB:", relayErr.message);
-      }
-    }
-
-    // Broadcast to WebSocket clients
-    // broadcastToDevice(deviceIdFromTopic, { type: 'sensor_update', data: newSensorData });
-
-    // Check for Alerts
-    if (device.config_id) {
-      const config = await DeviceConfiguration.findById(device.config_id);
-
-      if (config && config.alert_enabled) {
-        const checkThreshold = async (param, value, min, max, unit) => {
-          if (value < min || value > max) {
-            const alertType = "caution"; // Only 'caution' as per simplified requirements
-            const message = `${param} is ${value} ${unit} (Range: ${min}-${max})`;
-
-            // Check if recent alert exists to prevent spamming
-            const recentAlert = await Alert.findOne({
-              device_id: device._id,
-              parameter: param,
-              status: { $ne: "resolved" },
-              created_at: { $gt: new Date(Date.now() - 15 * 60 * 1000) }, // 15 min cooldown
-            });
-
-            if (!recentAlert) {
-              const newAlert = new Alert({
-                device_id: device._id,
-                user_id: device.user_id, // Ensure device has user_id populated or fetched
-                farm_id: device.farm_id,
-                type: alertType,
-                severity: "caution",
-                message: message,
-                parameter: param,
-                value: value,
-                threshold_min: min,
-                threshold_max: max,
-              });
-              await newAlert.save();
-              console.log(`⚠️ New Alert Created: ${message}`);
-
-              // Populate device details for frontend toast
-              const alertToSend = {
-                ...newAlert.toObject(),
-                device_name: device.device_name,
-                device: device._id,
-              };
-
-              broadcastToUser(device.user_id, {
-                type: "alert",
-                data: alertToSend,
-              });
-            }
-          }
-        };
-
-        // Check each parameter
-        if (data.ph !== undefined)
-          await checkThreshold(
-            "pH",
-            data.ph,
-            config.ph_min,
-            config.ph_max,
-            "pH",
-          );
-        if (data.water_temp !== undefined)
-          await checkThreshold(
-            "Water Temp",
-            data.water_temp,
-            config.water_temp_min,
-            config.water_temp_max,
-            "°C",
-          );
-        if (data.air_temp !== undefined)
-          await checkThreshold(
-            "Air Temp",
-            data.air_temp,
-            config.air_temp_min,
-            config.air_temp_max,
-            "°C",
-          );
-        if (data.ec !== undefined)
-          await checkThreshold(
-            "EC",
-            data.ec,
-            config.ec_value_min,
-            config.ec_value_max,
-            "mS/cm",
-          );
-        if (data.light !== undefined)
-          await checkThreshold(
-            "Light",
-            data.light,
-            config.light_intensity_min,
-            config.light_intensity_max,
-            "lux",
-          );
-      }
-    }
-  } catch (err) {
-    console.error("❌ MQTT Message Error:", err);
-  }
-});
-
-
-
 

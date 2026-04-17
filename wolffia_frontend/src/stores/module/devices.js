@@ -21,7 +21,6 @@ const normalizeDevice = (device) => ({
   configuration: device.config_id
     ? {
         id: device.config_id._id || device.config_id.id,
-        mqtt_topic: device.config_id.mqtt_topic,
         alert_enabled: device.config_id.alert_enabled,
         sampling_interval: device.config_id.sampling_interval,
         ph_min: device.config_id.ph_min,

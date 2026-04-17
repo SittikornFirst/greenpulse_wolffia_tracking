@@ -71,6 +71,15 @@ const routes = [
     },
   },
   {
+    path: "/activity",
+    name: "SystemActivity",
+    component: () => import("@/views/SystemActivityView.vue"),
+    meta: {
+      requiresAuth: true,
+      title: "System Activity",
+    },
+  },
+  {
     path: "/farms",
     name: "Farms",
     component: () => import("@/views/FarmsView.vue"),

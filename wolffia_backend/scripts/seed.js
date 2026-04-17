@@ -139,7 +139,6 @@ const seed = async () => {
 
       const config = await DeviceConfiguration.create({
         device_id: device._id,
-        mqtt_topic: `devices/${deviceId}/data`,
         alert_enabled: true,
         sampling_interval: 300,
         ph_min: 6.0,
@@ -163,7 +162,7 @@ const seed = async () => {
     console.log("📟 Created devices and configurations");
 
     // --- Removed mock sensor data and alerts generation ---
-    // User requested to rely on the real MQTT data going forward.
+    // ESP32 sends data directly to MongoDB Atlas Data API.
 
     console.log("\n✅ Seed completed successfully!");
     console.log("\nTest Credentials:");

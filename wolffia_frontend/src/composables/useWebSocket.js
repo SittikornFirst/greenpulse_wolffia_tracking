@@ -165,7 +165,7 @@ export function useWebSocket() {
         if (subscribeToDevices && websocketService.isConnected()) {
             const devices = devicesStore.devices;
             devices.forEach(device => {
-                websocketService.subscribeToDevice(device.id);
+                websocketService.subscribeToDevice(device.device_id);
             });
         }
 

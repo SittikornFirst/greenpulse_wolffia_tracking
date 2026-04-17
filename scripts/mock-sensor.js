@@ -8,7 +8,7 @@ const INTERVAL_MS = 15000; // Send data every 5 seconds
 // Generate realistic sensor readings with some variation
 function generateSensorData() {
   const baseValues = {
-    ph: 6.8,
+    ph: 6,
     waterTemp: 24,
     airTemp: 28,
     ec: 1.8,
@@ -18,7 +18,7 @@ function generateSensorData() {
   };
 
   // Add random variation
-  const variation = (base, range) => base + (Math.random() - 0.5) * range;
+  const variation = (base, range) => base + (Math.random()+1) * range;
 
   return {
     device_id: DEVICE_ID,

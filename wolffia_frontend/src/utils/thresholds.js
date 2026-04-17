@@ -108,6 +108,10 @@ export function updateThresholdsFromConfig(config) {
     THRESHOLDS.light_intensity.min = config.light_intensity_min;
     THRESHOLDS.light_intensity.max = config.light_intensity_max;
   }
+  if (config.air_humidity_min !== undefined) {
+    THRESHOLDS.air_humidity.min = config.air_humidity_min;
+    THRESHOLDS.air_humidity.max = config.air_humidity_max;
+  }
 }
 
 // Get thresholds object (useful for reactive access)

@@ -146,12 +146,12 @@ export default {
     // Convert hex color to rgba with opacity
     const hexToRgba = (hex, opacity = 0.1) => {
       // Remove # if present
-      hex = hex.replace("#", "");
+      const cleanHex = hex.replace("#", "");
 
       // Parse hex values
-      const r = parseInt(hex.substring(0, 2), 16);
-      const g = parseInt(hex.substring(2, 4), 16);
-      const b = parseInt(hex.substring(4, 6), 16);
+      const r = parseInt(cleanHex.substring(0, 2), 16);
+      const g = parseInt(cleanHex.substring(2, 4), 16);
+      const b = parseInt(cleanHex.substring(4, 6), 16);
 
       return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     };
@@ -335,17 +335,13 @@ export default {
       };
 
       // Add optimal range visualization
+      // Note: chartjs-plugin-annotation not installed, using alternative approach
       if (props.optimalRange) {
-        config.options.plugins.annotation = {
-          annotations: {
-            box: {
-              type: "box",
-              yMin: props.optimalRange.min,
-              yMax: props.optimalRange.max,
-              backgroundColor: optimalRangeColor.value,
-              borderWidth: 0,
-            },
-          },
+        // Add reference lines as a custom plugin workaround
+        config.options.plugins.customReferenceLines = {
+          min: props.optimalRange.min,
+          max: props.optimalRange.max,
+          color: optimalRangeColor.value,
         };
       }
 

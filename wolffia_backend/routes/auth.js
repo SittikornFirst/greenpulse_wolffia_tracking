@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Farm from "../models/Farm.js";
 import { authenticate } from "../middleware/auth.js";
+import { auditLog } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -44,6 +45,15 @@ router.post("/register", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE || "24h" },
     );
+
+    await auditLog({
+      user_id: user._id,
+      target_type: "User",
+      target_id: user._id,
+      action_type: "REGISTER",
+      event: "User Registered",
+      message: `User ${user.user_name} (${user.email}) successfully registered as ${user.role}.`
+    });
 
     res.status(201).json({
       success: true,
@@ -87,6 +97,15 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE || "24h" },
     );
+
+    await auditLog({
+      user_id: user._id,
+      target_type: "User",
+      target_id: user._id,
+      action_type: "LOGIN",
+      event: "User Login",
+      message: `User ${user.user_name} logged in.`
+    });
 
     res.json({
       success: true,

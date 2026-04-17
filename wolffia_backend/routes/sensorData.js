@@ -18,6 +18,7 @@ const getQualityFlag = (reading) => {
     ec_value: [1.0, 2.5],
     water_temperature_c: [20, 28],
     air_temperature_c: [18, 35],
+    air_humidity: [60, 80],
     light_intensity: [3500, 6000],
   };
 
@@ -37,6 +38,7 @@ const attachVirtualMetrics = (reading) => {
     { field: "tds_value", alias: "tds" },
     { field: "water_temperature_c", alias: "temperature_water_c" },
     { field: "air_temperature_c", alias: "temperature_air_c" },
+    { field: "air_humidity", alias: "humidity" },
     { field: "light_intensity", alias: "light_intensity" },
   ];
 
@@ -98,6 +100,11 @@ const checkThresholds = async (device, config, sensorPayload) => {
       key: "water_temperature_c",
       min: config.water_temp_min,
       max: config.water_temp_max,
+    },
+    {
+      key: "air_humidity",
+      min: config.air_humidity_min,
+      max: config.air_humidity_max,
     },
   ];
 
@@ -164,6 +171,7 @@ router.post("/", async (req, res) => {
       req.body.air_temperature_c ?? req.body.temperature_air_c
     );
     const light = parseValue(req.body.light_intensity);
+    const airHumidity = parseValue(req.body.air_humidity);
 
     const sensorPayload = {
       device_id: device.device_id,
@@ -175,6 +183,7 @@ router.post("/", async (req, res) => {
         (ecValue ? Number((ecValue * 0.64).toFixed(2)) : undefined),
       water_temperature_c: waterTemp,
       air_temperature_c: airTemp,
+      air_humidity: airHumidity,
       light_intensity: light,
     };
 
@@ -229,6 +238,81 @@ router.post("/", async (req, res) => {
 });
 
 router.use(authenticate);
+
+// Get activity log
+router.get("/activity", async (req, res) => {
+  try {
+    const { filter = "all", sensor, page = 1, limit = 20, device_id, startDate, endDate } = req.query;
+
+    const deviceQuery = { };
+    if (req.user.role !== "admin") {
+      deviceQuery.user_id = req.user._id;
+    }
+    
+    const devices = await Device.find(deviceQuery).lean();
+    let deviceIds = devices.map((d) => d.device_id);
+    const deviceMap = devices.reduce((acc, d) => {
+      acc[d.device_id] = d;
+      return acc;
+    }, {});
+
+    // Filter by specific device
+    if (device_id) {
+      deviceIds = deviceIds.filter(id => id === device_id);
+    }
+
+    const query = { device_id: { $in: deviceIds } };
+
+    if (filter !== "all") {
+      query.quality_flag = filter === "abnormal" ? { $in: ["suspect", "error"] } : "valid";
+    }
+    if (sensor) {
+      query[sensor] = { $exists: true, $ne: null };
+    }
+
+    // Date range filtering
+    if (startDate || endDate) {
+      query.created_at = {};
+      if (startDate) query.created_at.$gte = new Date(startDate);
+      if (endDate) query.created_at.$lte = new Date(endDate);
+    }
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    const [total, data] = await Promise.all([
+      SensorData.countDocuments(query),
+      SensorData.find(query)
+        .sort({ created_at: -1 })
+        .skip(skip)
+        .limit(limitNum)
+    ]);
+
+    const mappedData = data.map(doc => {
+      const reading = doc.toObject({ virtuals: true });
+      const device = deviceMap[reading.device_id];
+      return {
+        ...attachVirtualMetrics(reading),
+        device_name: device ? device.device_name : "Unknown Device",
+        farm_id: device ? device.farm_id : null
+      };
+    });
+
+    res.json({
+      success: true,
+      data: mappedData,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.max(1, Math.ceil(total / limitNum))
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Get latest readings
 router.get("/latest", async (req, res) => {

@@ -249,6 +249,26 @@
             :loading="loading"
             @range-change="handleChartRangeChange"
           />
+
+          <ChartCard
+            :title="`Total Dissolved Solids (${chartTimeRangeLabel})`"
+            :data="tdsData"
+            chart-type="line"
+            :color="chartColors.tds"
+            :optimal-range="chartRanges.tds"
+            :loading="loading"
+            @range-change="handleChartRangeChange"
+          />
+
+          <ChartCard
+            :title="`Air Humidity (${chartTimeRangeLabel})`"
+            :data="humidityData"
+            chart-type="line"
+            :color="chartColors.humidity"
+            :optimal-range="chartRanges.humidity"
+            :loading="loading"
+            @range-change="handleChartRangeChange"
+          />
         </div>
 
         <div class="recent-alerts">
@@ -285,6 +305,7 @@ import {
   MapPin,
   Cpu,
   User,
+  Cloud,
 } from "lucide-vue-next";
 import { useSensorDataStore } from "@/stores/module/sensorData";
 import { useDevicesStore } from "@/stores/module/devices";
@@ -427,6 +448,14 @@ export default {
           ),
           status: "normal",
         },
+        humidity: {
+          value: avg(
+            (readings || [])
+              .map((r) => r?.humidity?.value || 0)
+              .filter((v) => v > 0),
+          ),
+          status: "normal",
+        },
         timestamp: latestTimestamp.toISOString(),
         deviceCount: readings.length,
       };
@@ -440,6 +469,8 @@ export default {
       temperature: "#ef4444", // Red
       light: "#f59e0b", // Amber
       ec: "#10b981", // Green
+      tds: "#8b5cf6", // Purple
+      humidity: "#06b6d4", // Cyan
     };
 
     // Dynamic chart ranges from THRESHOLDS config
@@ -454,6 +485,8 @@ export default {
         max: THRESHOLDS.light_intensity.max,
       },
       ec: { min: THRESHOLDS.ec_value.min, max: THRESHOLDS.ec_value.max },
+      tds: { min: THRESHOLDS.tds_value.min, max: THRESHOLDS.tds_value.max },
+      humidity: { min: THRESHOLDS.air_humidity.min, max: THRESHOLDS.air_humidity.max },
     }));
 
     const metricStatus = (key, value) => {
@@ -542,6 +575,30 @@ export default {
           rangeMax: THRESHOLDS.ec_value.max,
           lastUpdate: reading.timestamp,
         },
+        {
+          id: "tds_value",
+          title: "Total Dissolved Solids",
+          value: reading.tds?.value?.toFixed(0) ?? "--",
+          unit: "ppm",
+          icon: "Beaker",
+          status: metricStatus("tds_value", reading.tds?.value),
+          trend: null,
+          rangeMin: THRESHOLDS.tds_value.min,
+          rangeMax: THRESHOLDS.tds_value.max,
+          lastUpdate: reading.timestamp,
+        },
+        {
+          id: "air_humidity",
+          title: "Air Humidity",
+          value: reading.humidity?.value?.toFixed(1) ?? "--",
+          unit: "%",
+          icon: "Cloud",
+          status: metricStatus("air_humidity", reading.humidity?.value),
+          trend: null,
+          rangeMin: THRESHOLDS.air_humidity.min,
+          rangeMax: THRESHOLDS.air_humidity.max,
+          lastUpdate: reading.timestamp,
+        },
       ];
     });
 
@@ -590,6 +647,18 @@ export default {
         .map((reading) => ({ x: reading.timestamp, y: reading.ec.value })),
     );
 
+    const tdsData = computed(() =>
+      (historicalData.value || [])
+        .filter((reading) => reading?.tds?.value !== undefined)
+        .map((reading) => ({ x: reading.timestamp, y: reading.tds.value })),
+    );
+
+    const humidityData = computed(() =>
+      (historicalData.value || [])
+        .filter((reading) => reading?.humidity?.value !== undefined)
+        .map((reading) => ({ x: reading.timestamp, y: reading.humidity.value })),
+    );
+
     const recentAlerts = computed(() => {
       if (!userDevices.value || userDevices.value.length === 0) return [];
       const deviceIds = userDevices.value.map((d) => d.device_id);
@@ -608,39 +677,42 @@ export default {
       try {
         // Step 1: Fetch devices for the selected farm
         await devicesStore.fetchDevices(selectedFarmId.value);
-        const device = devicesStore.devices[0];
+        const devices = devicesStore.devices || [];
 
-        if (!device) {
+        if (devices.length === 0) {
           console.warn("No devices found for farm, skipping sensor data fetch");
-          // Still fetch alerts even without devices
           await alertsStore.fetchAlerts();
           return;
         }
 
-        // Step 2: Update thresholds from device configuration if available
-        if (device.config_id || device.configuration) {
+        // Step 2: Update thresholds from the first device config (canonical thresholds)
+        const firstDevice = devices[0];
+        if (firstDevice.config_id || firstDevice.configuration) {
           const config =
-            typeof device.config_id === "object"
-              ? device.config_id
-              : device.configuration;
+            typeof firstDevice.config_id === "object"
+              ? firstDevice.config_id
+              : firstDevice.configuration;
           if (config) {
             updateThresholdsFromConfig(config);
           }
         }
 
-        // Step 3: Fetch sensor data and alerts in parallel
+        // Step 3: Fetch sensor data for ALL devices + alerts in parallel
         await Promise.all([
-          sensorDataStore.fetchLatestReadings(device.device_id),
-          sensorDataStore.fetchHistoricalData(device.device_id, {
-            range: chartTimeRange.value,
-          }),
+          ...devices.map((device) =>
+            sensorDataStore.fetchLatestReadings(device.device_id)
+          ),
+          ...devices.map((device) =>
+            sensorDataStore.fetchHistoricalData(device.device_id, {
+              range: chartTimeRange.value,
+            })
+          ),
           alertsStore.fetchAlerts(),
         ]);
 
-        console.log("✅ Dashboard data refreshed successfully");
+        console.log(`✅ Dashboard data refreshed for ${devices.length} device(s)`);
       } catch (error) {
         console.error("❌ Error refreshing dashboard data:", error);
-        // Don't throw - let dashboard show partial data if available
       } finally {
         loading.value = false;
       }
@@ -665,6 +737,12 @@ export default {
               sensorDataStore.fetchHistoricalData(device.device_id, { range }),
             ),
           );
+          // Resubscribe to devices with new range
+          if (websocketService.isConnected()) {
+            userDevices.value.forEach((device) => {
+              websocketService.subscribeToDevice(device.device_id);
+            });
+          }
         } catch (error) {
           console.error("Error fetching historical data:", error);
         } finally {

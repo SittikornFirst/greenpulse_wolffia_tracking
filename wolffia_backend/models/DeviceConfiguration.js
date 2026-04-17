@@ -7,10 +7,7 @@ const deviceConfigurationSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    mqtt_topic: {
-        type: String,
-        required: true
-    },
+
     alert_enabled: {
         type: Boolean,
         default: true

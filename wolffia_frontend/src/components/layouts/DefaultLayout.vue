@@ -177,6 +177,7 @@ import {
   AlertCircle,
   Info,
   MapPin,
+  Activity,
 } from "lucide-vue-next";
 import { useAlertsStore } from "@/stores/module/alerts";
 import { useWebSocket } from "@/composables/useWebSocket";
@@ -199,6 +200,7 @@ export default {
     AlertCircle,
     Info,
     MapPin,
+    Activity,
   },
   setup() {
     const route = useRoute();
@@ -227,7 +229,8 @@ export default {
         { path: "/farms", label: "Farms", icon: MapPin, requiredRole: "admin" },
         { path: "/users", label: "Users", icon: User, requiredRole: "admin" },
         { path: "/analytics", label: "Analytics", icon: TrendingUp },
-        { path: "/settings", label: "Settings", icon: Settings },
+        { path: "/activity", label: "System Activity", icon: Activity, requiredRole: "admin" },
+        // { path: "/settings", label: "Settings", icon: Settings },
       ];
 
       return items.filter(

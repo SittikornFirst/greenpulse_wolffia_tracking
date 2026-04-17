@@ -198,4 +198,88 @@ router.get("/admin/stats", async (req, res) => {
   }
 });
 
+// Min-Max per sensor endpoint
+router.get("/min-max/:deviceId", async (req, res) => {
+  try {
+    const { range, startDate, endDate } = req.query;
+    const deviceQuery = { device_id: req.params.deviceId };
+
+    if (req.user.role !== "admin") {
+      deviceQuery.user_id = req.user._id;
+    }
+
+    const device = await Device.findOne(deviceQuery);
+    if (!device) {
+      return res.status(404).json({ success: false, message: "Device not found" });
+    }
+
+    let startTime;
+    if (range && range !== "all") {
+      const now = new Date();
+      const ranges = {
+        "1h": 60 * 60 * 1000,
+        "6h": 6 * 60 * 60 * 1000,
+        "24h": 24 * 60 * 60 * 1000,
+        "7d": 7 * 24 * 60 * 60 * 1000,
+        "30d": 30 * 24 * 60 * 60 * 1000,
+        "1y": 365 * 24 * 60 * 60 * 1000,
+      };
+      if (ranges[range]) {
+        startTime = new Date(now - ranges[range]);
+      }
+    } else if (startDate) {
+      startTime = new Date(startDate);
+    }
+
+    const matchQuery = { device_id: device.device_id };
+    if (startTime) matchQuery.created_at = { $gte: startTime };
+    if (endDate) {
+      matchQuery.created_at = { ...matchQuery.created_at, $lte: new Date(endDate) };
+    }
+
+    const stats = await SensorData.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          ph_min: { $min: "$ph_value" },
+          ph_max: { $max: "$ph_value" },
+          ph_avg: { $avg: "$ph_value" },
+          ec_min: { $min: "$ec_value" },
+          ec_max: { $max: "$ec_value" },
+          ec_avg: { $avg: "$ec_value" },
+          water_temp_min: { $min: "$water_temperature_c" },
+          water_temp_max: { $max: "$water_temperature_c" },
+          water_temp_avg: { $avg: "$water_temperature_c" },
+          air_temp_min: { $min: "$air_temperature_c" },
+          air_temp_max: { $max: "$air_temperature_c" },
+          air_temp_avg: { $avg: "$air_temperature_c" },
+          light_min: { $min: "$light_intensity" },
+          light_max: { $max: "$light_intensity" },
+          light_avg: { $avg: "$light_intensity" },
+        }
+      }
+    ]);
+
+    const result = stats.length > 0 ? stats[0] : {
+      count: 0,
+      ph_min: null, ph_max: null, ph_avg: null,
+      ec_min: null, ec_max: null, ec_avg: null,
+      water_temp_min: null, water_temp_max: null, water_temp_avg: null,
+      air_temp_min: null, air_temp_max: null, air_temp_avg: null,
+      light_min: null, light_max: null, light_avg: null,
+    };
+    
+    delete result._id;
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 export default router;

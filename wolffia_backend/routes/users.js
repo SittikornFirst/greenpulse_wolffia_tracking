@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import Farm from "../models/Farm.js";
 import Device from "../models/Device.js";
 import { authenticate, authorize } from "../middleware/auth.js";
+import { auditLog } from "../utils/logger.js";
 
 const router = express.Router();
 
@@ -119,6 +120,15 @@ router.post("/", authorize("admin"), async (req, res) => {
       });
     }
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "User",
+      target_id: user._id,
+      action_type: "CREATE",
+      event: "User Created",
+      message: `Admin ${req.user.email} created new user ${user.email} as ${user.role}.`
+    });
+
     res.status(201).json({
       success: true,
       user: {
@@ -170,6 +180,15 @@ router.put("/:id", authorize("admin"), async (req, res) => {
 
     await user.save();
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "User",
+      target_id: user._id,
+      action_type: "UPDATE",
+      event: "User Updated",
+      message: `Admin ${req.user.email} updated user ${user.email}.`
+    });
+
     res.json({
       success: true,
       user: {
@@ -216,6 +235,15 @@ router.delete("/:id", authorize("admin"), async (req, res) => {
       await User.findByIdAndUpdate(user._id, { is_deleted: true });
     }
 
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "User",
+      target_id: user._id,
+      action_type: "DELETE",
+      event: "User Deleted",
+      message: `Admin ${req.user.email} ${req.query.hard === "true" ? 'permanently deleted' : 'soft deleted'} user ${user.email}.`
+    });
+
     res.json({
       success: true,
       message: req.query.hard === "true" ? "User and associated data permanently deleted" : "User and associated data deleted",
@@ -248,6 +276,15 @@ router.patch("/:id/toggle-status", authorize("admin"), async (req, res) => {
 
     user.is_active = !user.is_active;
     await user.save();
+
+    await auditLog({
+      user_id: req.user._id,
+      target_type: "User",
+      target_id: user._id,
+      action_type: "UPDATE",
+      event: `User ${user.is_active ? 'Activated' : 'Deactivated'}`,
+      message: `Admin ${req.user.email} ${user.is_active ? 'activated' : 'deactivated'} user ${user.email}.`
+    });
 
     res.json({
       success: true,

@@ -48,6 +48,15 @@ const normalizeReading = (reading) => {
       status: "normal",
     };
   }
+  if (
+    reading.air_humidity !== undefined &&
+    !reading.humidity?.value
+  ) {
+    normalized.humidity = {
+      value: reading.air_humidity,
+      status: "normal",
+    };
+  }
 
   return normalized;
 };
@@ -64,20 +73,20 @@ export const useSensorDataStore = defineStore("sensorData", () => {
     ph: { min: 6.5, max: 7.5 },
     water_temperature_c: { min: 20, max: 28 },
     air_temperature_c: { min: 18, max: 35 },
+    air_humidity: { min: 60, max: 80 },
     light_intensity: { min: 3500, max: 6000 },
     ec_value: { min: 1.0, max: 2.5 },
+    tds_value: { min: 640, max: 1600 },
   });
 
-  // Getters
-  const getLatestReading = computed(
-    () => (deviceId) => latestReadings.value[deviceId],
-  );
+  // Getters (regular functions for clarity and proper reactivity)
+  function getLatestReading(deviceId) {
+    return latestReadings.value[deviceId];
+  }
 
-  const getHistoricalData = computed(
-    () =>
-      (deviceId, range = "24h") =>
-        historicalData.value[`${deviceId}_${range}`] || [],
-  );
+  function getHistoricalData(deviceId, range = "24h") {
+    return historicalData.value[`${deviceId}_${range}`] || [];
+  }
 
   const getSensorStatus = computed(() => (deviceId) => {
     const reading = latestReadings.value[deviceId];
@@ -88,15 +97,18 @@ export const useSensorDataStore = defineStore("sensorData", () => {
     return "normal";
   });
 
-  const getAverageReading = computed(() => (deviceId, range = "24h") => {
+  function getAverageReading(deviceId, range = "24h") {
     const data = historicalData.value[`${deviceId}_${range}`];
     if (!data || data.length === 0) return null;
 
-    const sum = data.reduce((acc, reading) => acc + reading.value, 0);
+    const sum = data.reduce((acc, reading) => {
+      const value = reading.value ?? reading.ph?.value ?? reading.ec?.value ?? reading.tds?.value ?? reading.temperature_water_c?.value ?? reading.temperature_air_c?.value ?? reading.humidity?.value ?? reading.light_intensity?.value;
+      return acc + (typeof value === 'number' ? value : 0);
+    }, 0);
     return sum / data.length;
-  });
+  }
 
-  const getTrend = computed(() => (deviceId, range = "24h") => {
+  function getTrend(deviceId, range = "24h") {
     const data = historicalData.value[`${deviceId}_${range}`];
     if (!data || data.length < 2) return 0;
 
@@ -105,15 +117,42 @@ export const useSensorDataStore = defineStore("sensorData", () => {
 
     if (earlier.length === 0) return 0;
 
-    const recentAvg =
-      recent.reduce((sum, r) => sum + r.value, 0) / recent.length;
-    const earlierAvg =
-      earlier.reduce((sum, r) => sum + r.value, 0) / earlier.length;
+    const getValue = (r) => r.value ?? r.ph?.value ?? r.ec?.value ?? r.tds?.value ?? r.temperature_water_c?.value ?? r.temperature_air_c?.value ?? r.humidity?.value ?? r.light_intensity?.value ?? 0;
+
+    const recentAvg = recent.reduce((sum, r) => sum + getValue(r), 0) / recent.length;
+    const earlierAvg = earlier.reduce((sum, r) => sum + getValue(r), 0) / earlier.length;
 
     if (earlierAvg === 0) return 0;
 
     return ((recentAvg - earlierAvg) / earlierAvg) * 100;
-  });
+  }
+
+  // Statistics helpers
+  function getStatistics(deviceId, range = "24h") {
+    const data = historicalData.value[`${deviceId}_${range}`];
+    if (!data || data.length === 0) {
+      return {
+        min: 0,
+        max: 0,
+        avg: 0,
+        count: 0,
+      };
+    }
+
+    const getValue = (r) => r.value ?? r.ph?.value ?? r.ec?.value ?? r.tds?.value ?? r.temperature_water_c?.value ?? r.temperature_air_c?.value ?? r.humidity?.value ?? r.light_intensity?.value;
+    const values = data.map(getValue).filter(v => typeof v === 'number' && !isNaN(v));
+
+    if (values.length === 0) {
+      return { min: 0, max: 0, avg: 0, count: 0 };
+    }
+
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+      avg: values.reduce((sum, v) => sum + v, 0) / values.length,
+      count: values.length,
+    };
+  }
 
   // Actions
   async function fetchLatestReadings(deviceId = null) {
@@ -183,15 +222,12 @@ export const useSensorDataStore = defineStore("sensorData", () => {
     try {
       const response = await apiService.submitReading(reading);
 
-      // Update latest readings
       latestReadings.value[reading.deviceId] = normalizeReading(response.data);
 
-      // Add to historical data if exists
       const key = `${reading.deviceId}_24h`;
       if (historicalData.value[key]) {
         historicalData.value[key].push(response.data);
 
-        // Keep only last 100 readings in memory
         if (historicalData.value[key].length > 100) {
           historicalData.value[key].shift();
         }
@@ -205,19 +241,16 @@ export const useSensorDataStore = defineStore("sensorData", () => {
   }
 
   function updateRealtimeReading(reading) {
-    // Update latest reading
     const normalized = normalizeReading({
       ...reading,
       timestamp: reading.timestamp || new Date().toISOString(),
     });
     latestReadings.value[normalized.deviceId] = normalized;
 
-    // Add to historical data
     const key = `${reading.deviceId}_24h`;
     if (historicalData.value[key]) {
       historicalData.value[key].push(reading);
 
-      // Keep only last 100 readings
       if (historicalData.value[key].length > 100) {
         historicalData.value[key].shift();
       }
@@ -245,27 +278,6 @@ export const useSensorDataStore = defineStore("sensorData", () => {
   function clearError() {
     error.value = null;
   }
-
-  // Statistics helpers
-  const getStatistics = computed(() => (deviceId, range = "24h") => {
-    const data = historicalData.value[`${deviceId}_${range}`];
-    if (!data || data.length === 0) {
-      return {
-        min: 0,
-        max: 0,
-        avg: 0,
-        count: 0,
-      };
-    }
-
-    const values = data.map((r) => r.value);
-    return {
-      min: Math.min(...values),
-      max: Math.max(...values),
-      avg: values.reduce((sum, v) => sum + v, 0) / values.length,
-      count: values.length,
-    };
-  });
 
   // Export data to CSV
   function exportToCSV(deviceId, range = "24h") {

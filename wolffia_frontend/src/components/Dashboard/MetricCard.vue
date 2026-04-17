@@ -11,6 +11,9 @@
                         {{ formattedValue }}
                         <span class="metric-card__unit">{{ unit }}</span>
                     </div>
+                    <div v-if="valueMin !== null && valueMax !== null" class="metric-card__minmax">
+                        Min: {{ formattedMin }} {{ unit }} | Max: {{ formattedMax }} {{ unit }}
+                    </div>
                 </div>
             </div>
 
@@ -35,7 +38,7 @@
 
 <script>
 import { computed } from 'vue';
-import { Droplet, Thermometer, Sun, Activity, TrendingUp, TrendingDown, Minus } from 'lucide-vue-next';
+import { Droplet, Thermometer, Sun, Activity, TrendingUp, TrendingDown, Minus, Cloud } from 'lucide-vue-next';
 
 export default {
     name: 'MetricCard',
@@ -44,6 +47,7 @@ export default {
         Thermometer,
         Sun,
         Activity,
+        Cloud,
         TrendingUp,
         TrendingDown,
         Minus
@@ -57,6 +61,14 @@ export default {
             type: [Number, String],
             required: true
         },
+        valueMin: {
+            type: [Number, String],
+            default: null
+        },
+        valueMax: {
+            type: [Number, String],
+            default: null
+        },
         unit: {
             type: String,
             default: ''
@@ -64,7 +76,7 @@ export default {
         icon: {
             type: String,
             default: 'Activity',
-            validator: (value) => ['Droplet', 'Thermometer', 'Sun', 'Activity'].includes(value)
+            validator: (value) => ['Droplet', 'Thermometer', 'Sun', 'Activity', 'Cloud'].includes(value)
         },
         status: {
             type: String,
@@ -102,7 +114,7 @@ export default {
     },
     setup(props) {
         const iconComponent = computed(() => {
-            const icons = { Droplet, Thermometer, Sun, Activity };
+            const icons = { Droplet, Thermometer, Sun, Activity, Cloud };
             return icons[props.icon] || Activity;
         });
 
@@ -123,6 +135,20 @@ export default {
             return props.value;
         });
 
+        const formattedMin = computed(() => {
+            if (typeof props.valueMin === 'number') {
+                return props.valueMin.toFixed(props.decimals);
+            }
+            return props.valueMin;
+        });
+
+        const formattedMax = computed(() => {
+            if (typeof props.valueMax === 'number') {
+                return props.valueMax.toFixed(props.decimals);
+            }
+            return props.valueMax;
+        });
+
         const formatTimestamp = (timestamp) => {
             const now = new Date();
             const then = new Date(timestamp);
@@ -140,6 +166,8 @@ export default {
             trendIcon,
             trendClass,
             formattedValue,
+            formattedMin,
+            formattedMax,
             formatTimestamp
         };
     }

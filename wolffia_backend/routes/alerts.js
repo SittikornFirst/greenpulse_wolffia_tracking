@@ -1,6 +1,7 @@
 import express from 'express';
 import Alert from '../models/Alert.js';
 import { authenticate } from '../middleware/auth.js';
+import { auditLog } from '../utils/logger.js';
 
 const router = express.Router();
 
@@ -86,6 +87,15 @@ router.post('/', async (req, res) => {
         const alert = new Alert(alertData);
         await alert.save();
 
+        await auditLog({
+            user_id: req.user._id,
+            target_type: "Alert",
+            target_id: alert._id,
+            action_type: "CREATE",
+            event: "Alert Created",
+            message: `User ${req.user.email} created an alert.`
+        });
+
         res.status(201).json(alert);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -124,6 +134,15 @@ router.patch('/:id/resolve', async (req, res) => {
             return res.status(404).json({ success: false, message: 'Alert not found' });
         }
 
+        await auditLog({
+            user_id: req.user._id,
+            target_type: "Alert",
+            target_id: alert._id,
+            action_type: "UPDATE",
+            event: "Alert Resolved",
+            message: `User ${req.user.email} resolved alert ${alert.alert_type || alert.message || alert._id}.`
+        });
+
         res.json(alert);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -141,6 +160,15 @@ router.delete('/:id', async (req, res) => {
         if (!alert) {
             return res.status(404).json({ success: false, message: 'Alert not found' });
         }
+
+        await auditLog({
+            user_id: req.user._id,
+            target_type: "Alert",
+            target_id: alert._id,
+            action_type: "DELETE",
+            event: "Alert Deleted",
+            message: `User ${req.user.email} deleted alert ${alert.alert_type || alert.message || alert._id}.`
+        });
 
         res.json({ success: true, message: 'Alert deleted' });
     } catch (error) {

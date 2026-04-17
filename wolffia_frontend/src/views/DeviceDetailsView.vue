@@ -72,6 +72,87 @@
                 :relays="deviceConfig.relays || []"
                 @config-updated="refreshReadings"
             />
+
+            <!-- Sensor Reading Log -->
+            <div class="info-card">
+                <div class="card-header">
+                    <h2>Sensor Reading Log</h2>
+                    <div class="log-controls">
+                        <template v-if="logTimeRange === 'custom'">
+                            <input type="datetime-local" v-model="logDateFrom" class="select-input select-sm" @change="fetchReadingLog(true)" />
+                            <span class="date-sep">→</span>
+                            <input type="datetime-local" v-model="logDateTo" class="select-input select-sm" @change="fetchReadingLog(true)" />
+                        </template>
+                        
+                        <select v-model="logTimeRange" @change="onTimeRangeChange" class="select-input select-sm">
+                            <option value="1h">Last 1 Hour</option>
+                            <option value="6h">Last 6 Hours</option>
+                            <option value="24h">Last 24 Hours</option>
+                            <option value="7d">Last 7 Days</option>
+                            <option value="30d">Last 30 Days</option>
+                            <option value="all">All Time</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                        
+                        <button @click="fetchReadingLog(true)" class="btn btn-secondary btn-sm" :disabled="logLoading">
+                            <RefreshCw :size="14" :class="{ spin: logLoading }" />
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="logLoading && readingLogs.length === 0" class="log-empty">
+                    <div class="spinner-sm"></div>
+                    <p>Loading readings...</p>
+                </div>
+                <div v-else-if="readingLogs.length === 0" class="log-empty">
+                    <p>No sensor readings found for this time range.</p>
+                </div>
+                <div v-else class="log-table-wrap">
+                    <table class="log-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>pH</th>
+                                <th>Water °C</th>
+                                <th>Air °C</th>
+                                <th>Humidity</th>
+                                <th>EC</th>
+                                <th>TDS</th>
+                                <th>Light</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="row in readingLogs" :key="row._id || row.data_id">
+                                <td class="td-ts">
+                                    <Clock :size="12" class="td-ts-icon" />
+                                    {{ formatLogTime(row.timestamp || row.created_at) }}
+                                </td>
+                                <td>{{ fmtVal(row.ph_value) }}</td>
+                                <td>{{ fmtVal(row.water_temperature_c, 1) }}</td>
+                                <td>{{ fmtVal(row.air_temperature_c, 1) }}</td>
+                                <td>{{ fmtVal(row.air_humidity, 1) }}{{ row.air_humidity != null ? '%' : '' }}</td>
+                                <td>{{ fmtVal(row.ec_value) }}</td>
+                                <td>{{ fmtVal(row.tds_value, 0) }}</td>
+                                <td>{{ fmtVal(row.light_intensity, 0) }}</td>
+                                <td>
+                                    <span :class="['log-badge', row.quality_flag === 'valid' ? 'log-badge--ok' : 'log-badge--warn']">
+                                        {{ row.quality_flag === 'valid' ? 'Normal' : 'Abnormal' }}
+                                    </span>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div v-if="logTotalPages > 1" class="log-pagination">
+                    <span class="log-page-info">Page {{ logPage }} of {{ logTotalPages }} ({{ logTotal }} readings)</span>
+                    <div class="log-page-btns">
+                        <button @click="changeLogPage(logPage - 1)" :disabled="logPage <= 1 || logLoading" class="btn btn-secondary btn-sm">Prev</button>
+                        <button @click="changeLogPage(logPage + 1)" :disabled="logPage >= logTotalPages || logLoading" class="btn btn-secondary btn-sm">Next</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div v-else class="error-state">
@@ -87,7 +168,13 @@
         <div v-if="showThresholdModal && device" class="modal-overlay" @click="showThresholdModal = false">
             <div class="modal" @click.stop>
                 <div class="modal-header">
-                    <h2>Device Configuration</h2>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <h2>Device Configuration</h2>
+                        <button type="button" @click="applyWolffiaPresets" class="btn btn-outline btn-sm preset-btn" style="color: #10b981; border-color: #10b981;">
+                            <Leaf :size="14" />
+                            Best for Wolffia
+                        </button>
+                    </div>
                     <button @click="showThresholdModal = false" class="close-btn">
                         <X :size="20" />
                     </button>
@@ -201,7 +288,11 @@
 <script>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ArrowLeft, AlertCircle, Settings, X } from 'lucide-vue-next';
+import {
+    ArrowLeft, AlertCircle, RefreshCw, Activity,
+    Calendar, AlertTriangle, Droplets, Thermometer,
+    Wind, Zap, Sun, ShieldCheck, Clock, Settings, X, Leaf
+} from 'lucide-vue-next';
 import apiService from '@/services/api';
 import { useSensorDataStore } from '@/stores/module/sensorData';
 import RelayControl from '@/components/Devices/RelayControl.vue';
@@ -214,8 +305,11 @@ export default {
         AlertCircle,
         Settings,
         X,
+        RefreshCw,
+        Clock,
         RelayControl,
-        ScheduleManager
+        ScheduleManager,
+        Leaf
     },
     setup() {
         const route = useRoute();
@@ -227,6 +321,17 @@ export default {
         const device = ref(null);
         const latestReading = ref(null);
         const showThresholdModal = ref(false);
+
+        // Reading log state
+        const readingLogs = ref([]);
+        const logLoading = ref(false);
+        const logPage = ref(1);
+        const logLimit = ref(20);
+        const logTotal = ref(0);
+        const logTotalPages = ref(1);
+        const logTimeRange = ref('24h');
+        const logDateFrom = ref('');
+        const logDateTo = ref('');
 
         const thresholds = ref({
             sampling_interval: 60,
@@ -362,12 +467,93 @@ export default {
             }
         };
 
-        const refreshReadings = async () => {
-            await fetchDeviceDetails();
+        const applyWolffiaPresets = () => {
+            thresholds.value.sampling_interval = 300;
+            thresholds.value.alert_enabled = true;
+            thresholds.value.ph.min = 6.0;
+            thresholds.value.ph.max = 7.5;
+            thresholds.value.water_temp.min = 20.0;
+            thresholds.value.water_temp.max = 28.0;
+            thresholds.value.air_temp.min = 18.0;
+            thresholds.value.air_temp.max = 35.0;
+            thresholds.value.ec.min = 1.0;
+            thresholds.value.ec.max = 2.5;
+            thresholds.value.light.min = 3500;
+            thresholds.value.light.max = 6000;
         };
 
-        onMounted(() => {
-            fetchDeviceDetails();
+        const refreshReadings = async () => {
+            await fetchDeviceDetails();
+            await fetchReadingLog();
+        };
+
+        const fetchReadingLog = async (resetPage = false) => {
+            if (!device.value) return;
+            if (resetPage) logPage.value = 1;
+            logLoading.value = true;
+            try {
+                const opts = {
+                    page: logPage.value,
+                    limit: logLimit.value
+                };
+
+                if (logTimeRange.value === 'custom') {
+                    // Custom date range
+                    if (logDateFrom.value) opts.startDate = new Date(logDateFrom.value).toISOString();
+                    if (logDateTo.value) opts.endDate = new Date(logDateTo.value).toISOString();
+                } else if (logTimeRange.value !== 'all') {
+                    // Preset range
+                    opts.range = logTimeRange.value;
+                }
+                // If 'all', we pass no range/dates — backend returns everything
+
+                const resp = await apiService.getHistoricalData(device.value.device_id, opts);
+                const resData = resp.data;
+                if (resData && resData.data) {
+                    readingLogs.value = resData.data;
+                    logTotal.value = resData.pagination?.total || resData.data.length;
+                    logTotalPages.value = resData.pagination?.pages || 1;
+                } else if (Array.isArray(resData)) {
+                    readingLogs.value = resData;
+                    logTotal.value = resData.length;
+                    logTotalPages.value = 1;
+                }
+            } catch (e) {
+                console.error('Failed to fetch reading log:', e);
+            } finally {
+                logLoading.value = false;
+            }
+        };
+
+        const onTimeRangeChange = () => {
+            if (logTimeRange.value !== 'custom') {
+                fetchReadingLog(true);
+            }
+        };
+
+        const changeLogPage = (p) => {
+            if (p >= 1 && p <= logTotalPages.value) {
+                logPage.value = p;
+                fetchReadingLog();
+            }
+        };
+
+        const fmtVal = (v, decimals = 2) => {
+            if (v === null || v === undefined) return '--';
+            return Number(v).toFixed(decimals);
+        };
+
+        const formatLogTime = (ts) => {
+            if (!ts) return '--';
+            return new Date(ts).toLocaleString('en-US', {
+                month: 'short', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            });
+        };
+
+        onMounted(async () => {
+            await fetchDeviceDetails();
+            await fetchReadingLog(true);
         });
 
         watch(
@@ -386,10 +572,25 @@ export default {
             latestReading,
             showThresholdModal,
             thresholds,
+            readingLogs,
+            logLoading,
+            logPage,
+            logLimit,
+            logTotal,
+            logTotalPages,
+            logTimeRange,
+            logDateFrom,
+            logDateTo,
             goBack,
             goToDevices,
             refreshReadings,
-            saveThresholds
+            saveThresholds,
+            applyWolffiaPresets,
+            fetchReadingLog,
+            changeLogPage,
+            onTimeRangeChange,
+            fmtVal,
+            formatLogTime
         };
     }
 };
@@ -738,5 +939,117 @@ export default {
     .threshold-inputs {
         grid-template-columns: 1fr;
     }
+}
+
+/* Reading Log */
+.log-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.date-sep {
+    color: #9ca3af;
+    font-size: 0.85rem;
+    padding: 0 0.15rem;
+}
+.select-sm {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+}
+.btn-sm {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+}
+.log-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem;
+    color: #6b7280;
+    gap: 0.5rem;
+}
+.spinner-sm {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #e5e7eb;
+    border-top-color: #10b981;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+.log-table-wrap {
+    overflow-x: auto;
+}
+.log-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.log-table th {
+    background: #f9fafb;
+    padding: 0.6rem 0.75rem;
+    text-align: left;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #e5e7eb;
+    white-space: nowrap;
+}
+.log-table td {
+    padding: 0.6rem 0.75rem;
+    color: #374151;
+    border-bottom: 1px solid #f3f4f6;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.log-table tr:hover {
+    background: #fafbfc;
+}
+.td-ts {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: inherit;
+}
+.td-ts-icon {
+    color: #9ca3af;
+}
+.log-badge {
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+.log-badge--ok {
+    background: #d1fae5;
+    color: #065f46;
+}
+.log-badge--warn {
+    background: #fee2e2;
+    color: #991b1b;
+}
+.log-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 0 0 0.75rem 0.75rem;
+}
+.log-page-info {
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+.log-page-btns {
+    display: flex;
+    gap: 0.5rem;
+}
+.spin {
+    animation: spin 1s linear infinite;
 }
 </style>
