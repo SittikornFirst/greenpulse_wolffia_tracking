@@ -43,6 +43,7 @@ const sensorDataSchema = new mongoose.Schema(
     light_intensity: {
       type: Number,
       required: true,
+    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
