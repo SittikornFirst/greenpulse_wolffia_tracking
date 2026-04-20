@@ -94,6 +94,10 @@
         :key="device.id"
         :device="device"
         @click="goToDeviceDetails(device.id)"
+        @view-details="goToDeviceDetails(device.id)"
+        @toggle-relay="openConfigModal(device)"
+        @edit="openEditModal(device)"
+        @delete="handleArchiveDevice(device)"
       />
     </div>
     

@@ -8,6 +8,9 @@
       @close="alertsStore.dismissToast"
     />
 
+    <!-- Global Loading Overlay -->
+    <GlobalLoader />
+
     <component :is="layoutComponent">
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
@@ -26,6 +29,7 @@ import { useAlertsStore } from "@/stores/module/alerts";
 import DefaultLayout from "@/components/layouts/DefaultLayout.vue";
 import AuthLayout from "@/components/layouts/AuthLayout.vue";
 import AlertToast from "@/components/Alerts/AlertToast.vue";
+import GlobalLoader from "@/components/Common/GlobalLoader.vue";
 
 export default {
   name: "App",
@@ -33,6 +37,7 @@ export default {
     DefaultLayout,
     AuthLayout,
     AlertToast,
+    GlobalLoader,
   },
   setup() {
     const route = useRoute();

@@ -91,25 +91,25 @@
           {{ formatTimestamp(value) }}
         </template>
         <template #cell-ph="{ value }">
-          <span :style="{ color: getValueColor('ph_value', value) }">{{ formatValue(value) }}</span>
+          <span :style="{ color: getValueColor('ph_value', value?.value) }">{{ formatValue(value?.value) }}</span>
         </template>
         <template #cell-temperature_water_c="{ value }">
-          <span :style="{ color: getValueColor('water_temperature_c', value) }">{{ formatValue(value) }}</span>
+          <span :style="{ color: getValueColor('water_temperature_c', value?.value) }">{{ formatValue(value?.value) }}</span>
         </template>
         <template #cell-temperature_air_c="{ value }">
-          <span :style="{ color: getValueColor('air_temperature_c', value) }">{{ formatValue(value) }}</span>
+          <span :style="{ color: getValueColor('air_temperature_c', value?.value) }">{{ formatValue(value?.value) }}</span>
         </template>
         <template #cell-humidity="{ value }">
-          <span :style="{ color: getValueColor('air_humidity', value) }">{{ formatValue(value) }}</span>
+          <span :style="{ color: getValueColor('air_humidity', value?.value) }">{{ formatValue(value?.value) }}</span>
         </template>
         <template #cell-ec="{ value }">
-          <span :style="{ color: getValueColor('ec_value', value) }">{{ formatValue(value) }}</span>
+          <span :style="{ color: getValueColor('ec_value', value?.value) }">{{ formatValue(value?.value) }}</span>
         </template>
         <template #cell-tds="{ value }">
-          <span :style="{ color: getValueColor('tds_value', value) }">{{ formatInteger(value) }}</span>
+          <span :style="{ color: getValueColor('tds_value', value?.value) }">{{ formatInteger(value?.value) }}</span>
         </template>
         <template #cell-light_intensity="{ value }">
-          <span :style="{ color: getValueColor('light_intensity', value) }">{{ formatInteger(value) }}</span>
+          <span :style="{ color: getValueColor('light_intensity', value?.value) }">{{ formatInteger(value?.value) }}</span>
         </template>
       </DataTable>
     </template>

@@ -12,6 +12,10 @@ const sensorDataSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
+    timestamp: {
+      type: Date,
+      default: Date.now,
+    },
     ph_value: {
       type: Number,
       required: true,
@@ -39,12 +43,6 @@ const sensorDataSchema = new mongoose.Schema(
     light_intensity: {
       type: Number,
       required: true,
-    },
-    quality_flag: {
-      type: String,
-      enum: ["valid", "suspect", "error"],
-      default: "valid",
-    },
   },
   {
     timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
@@ -53,7 +51,7 @@ const sensorDataSchema = new mongoose.Schema(
   }
 );
 
-sensorDataSchema.index({ device_id: 1, created_at: -1 });
+sensorDataSchema.index({ device_id: 1, timestamp: -1 });
 
 const metricVirtuals = [
   { virtual: "ph", field: "ph_value" },
@@ -70,10 +68,6 @@ metricVirtuals.forEach(({ virtual, field }) => {
     if (value === undefined) return undefined;
     return { value, status: "normal" };
   });
-});
-
-sensorDataSchema.virtual("timestamp").get(function () {
-  return this.created_at;
 });
 
 export default mongoose.model("SensorData", sensorDataSchema);

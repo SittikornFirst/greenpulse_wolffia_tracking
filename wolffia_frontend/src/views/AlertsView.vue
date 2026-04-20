@@ -50,6 +50,12 @@
       </div>
 
       <div class="filter-controls">
+        <select v-model="filterPriority" class="filter-select">
+          <option value="">All Types</option>
+          <option value="critical">Critical</option>
+          <option value="warning">Warning</option>
+          <option value="info">Info</option>
+        </select>
         <select v-model="filterDevice" class="filter-select">
           <option value="">All Devices</option>
           <option
@@ -68,29 +74,15 @@
     </div>
 
     <!-- Loading State -->
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading alerts...</p>
-    </div>
+    <LoadingState v-if="loading" text="Loading alerts..." />
 
     <!-- Empty State -->
-    <div v-else-if="filteredAlerts.length === 0" class="empty-state">
-      <CheckCircle :size="64" />
-      <h3>
-        {{
-          activeTab === "all"
-            ? "No alerts found"
-            : "No " + activeTab + " alerts"
-        }}
-      </h3>
-      <p>
-        {{
-          activeTab === "resolved"
-            ? "Great! You have resolved all alerts."
-            : "All systems are operating normally."
-        }}
-      </p>
-    </div>
+    <EmptyState
+      v-else-if="filteredAlerts.length === 0"
+      :type="activeTab === 'resolved' ? 'success' : 'no-data'"
+      :title="activeTab === 'all' ? 'No alerts found' : `No ${activeTab} alerts`"
+      :description="activeTab === 'resolved' ? 'Great! You have resolved all alerts.' : 'All systems are operating normally.'"
+    />
 
     <!-- Alerts List -->
     <div v-else class="alerts-list">
@@ -142,6 +134,8 @@ import {
 import { useAlertsStore } from "@/stores/module/alerts";
 import { useDevicesStore } from "@/stores/module/devices";
 import AlertItem from "@/components/Alerts/AlertItem.vue";
+import LoadingState from "@/components/Common/LoadingState.vue";
+import EmptyState from "@/components/Common/EmptyState.vue";
 
 export default {
   name: "AlertsView",
@@ -152,6 +146,8 @@ export default {
     CheckCircle,
     Trash2,
     AlertItem,
+    LoadingState,
+    EmptyState,
   },
   setup() {
     const router = useRouter();

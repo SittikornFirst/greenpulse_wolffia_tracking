@@ -37,6 +37,15 @@
 
     <div class="alert-item__actions">
       <button
+        v-if="!alert.resolved && showDetails"
+        @click="handleResolve"
+        :disabled="resolving"
+        class="btn btn--resolve"
+        title="Resolve alert"
+      >
+        <CheckCircle :size="16" />
+      </button>
+      <button
         v-if="showDetails"
         @click="$emit('view-details', alert)"
         class="btn btn--secondary"
@@ -46,7 +55,7 @@
       </button>
 
       <button
-        v-if="allowDelete && alert.resolved"
+        v-if="allowDelete || (alert.resolved && showDetails)"
         @click="handleDelete"
         :disabled="deleting"
         class="btn btn--danger"

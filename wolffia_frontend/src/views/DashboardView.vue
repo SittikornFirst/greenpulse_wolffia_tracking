@@ -788,6 +788,12 @@ export default {
         adminStats.value = response.data.stats;
         lastSensorData.value = response.data.lastSensorData || [];
         deviceActivity.value = response.data.deviceActivity || [];
+
+        // Also fetch sensor data for admin users
+        await farmsStore.fetchFarms();
+        if (farmsStore.selectedFarmId) {
+          await refreshData();
+        }
       } catch (error) {
         console.error("Error fetching admin stats:", error);
       } finally {

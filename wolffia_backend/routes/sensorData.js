@@ -11,24 +11,6 @@ import { broadcastToDevice } from "../server.js";
 
 const router = express.Router();
 
-const getQualityFlag = (reading) => {
-  const inRange = (value, min, max) => value >= min && value <= max;
-  const ranges = {
-    ph_value: [6.0, 7.5],
-    ec_value: [1.0, 2.5],
-    water_temperature_c: [20, 28],
-    air_temperature_c: [18, 35],
-    air_humidity: [60, 80],
-    light_intensity: [3500, 6000],
-  };
-
-  const outOfRange = Object.entries(ranges).some(([key, [min, max]]) => {
-    const value = reading[key];
-    return typeof value === "number" && !inRange(value, min, max);
-  });
-
-  return outOfRange ? "suspect" : "valid";
-};
 
 const attachVirtualMetrics = (reading) => {
   if (!reading) return reading;
@@ -48,7 +30,7 @@ const attachVirtualMetrics = (reading) => {
     }
   });
 
-  reading.timestamp = reading.created_at;
+  reading.timestamp = reading.timestamp || reading.created_at;
   return reading;
 };
 
@@ -176,6 +158,7 @@ router.post("/", async (req, res) => {
     const sensorPayload = {
       device_id: device.device_id,
       data_id: crypto.randomUUID(),
+      timestamp: req.body.timestamp,
       ph_value: phValue,
       ec_value: ecValue,
       tds_value:
@@ -209,7 +192,7 @@ router.post("/", async (req, res) => {
         });
     }
 
-    sensorPayload.quality_flag = getQualityFlag(sensorPayload);
+
 
     const reading = await SensorData.create(sensorPayload);
 

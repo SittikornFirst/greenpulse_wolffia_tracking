@@ -23,11 +23,11 @@
 // ========== BACKEND API CONFIGURATION ==========
 // Configure this to point to your deployed Node.js backend.
 // E.g. "https://greenpulse-backend.onrender.com/api/sensor-data"
-constexpr char BACKEND_API_URL[] = "http://192.168.1.200:3000/api/sensor-data";  // Replace with your IP/Render URL
+constexpr char BACKEND_API_URL[] = "https://greenpulse-wolffia-tracking.onrender.com/api/sensor-data";
 
 // ========== WIFI CONFIGURATION ==========
-constexpr char WIFI_SSID[] = "FFirst";
-constexpr char WIFI_PASSWORD[] = "0971902368";
+constexpr char WIFI_SSID[] = "ibo";
+constexpr char WIFI_PASSWORD[] = "";
 constexpr char DEVICE_ID[] = "GREENPULSE-V1-MKUMW0RG-1JS0A";
 constexpr char NTP_SERVER[] = "pool.ntp.org";
 constexpr long GMT_OFFSET_SEC = 7 * 3600;

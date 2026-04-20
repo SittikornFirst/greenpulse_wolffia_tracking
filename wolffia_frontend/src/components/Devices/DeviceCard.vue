@@ -1,6 +1,6 @@
 <template>
   <div class="device-card">
-    <div class="device-header">
+    <div class="device-header" @click="$emit('click')">
       <h3 class="device-name">{{ device.device_name }}</h3>
       <div class="device-status-badge" :class="`status-${device.status}`">
         {{ device.status }}
@@ -84,31 +84,27 @@ export default {
       required: true
     }
   },
-  setup(props) {
+  emits: ["click", "view-details", "toggle-relay", "edit", "delete"],
+  setup(props, { emit }) {
     const isEditing = ref(false);
     const isDeleting = ref(false);
     const isTogglingRelay = ref(false);
 
     const viewDetails = () => {
-      // Navigate to device details page
-      // This would be implemented with router
-      console.log("View details for device:", props.device.device_id);
+      emit("view-details", props.device);
     };
 
     const toggleRelay = async () => {
       isTogglingRelay.value = true;
       try {
-        // TODO: Implement actual relay toggle via API
-        console.log("Toggle relay for device:", props.device.device_id);
-        // await apiService.toggleRelay(props.device.device_id);
+        emit("toggle-relay", props.device);
       } finally {
         isTogglingRelay.value = false;
       }
     };
 
     const editDevice = () => {
-      // Navigate to edit device form
-      console.log("Edit device:", props.device.device_id);
+      emit("edit", props.device);
     };
 
     const deleteDevice = async () => {
@@ -118,10 +114,7 @@ export default {
       
       isDeleting.value = true;
       try {
-        // TODO: Implement actual delete via API
-        console.log("Delete device:", props.device.device_id);
-        // await apiService.deleteDevice(props.device.device_id);
-        // Emit event to parent to remove from list
+        emit("delete", props.device);
       } finally {
         isDeleting.value = false;
       }
@@ -147,7 +140,6 @@ export default {
         value = value.value;
       }
       
-      // Format based on metric type
       switch (key) {
         case "ph":
           return typeof value === "number" ? value.toFixed(2) : value;
