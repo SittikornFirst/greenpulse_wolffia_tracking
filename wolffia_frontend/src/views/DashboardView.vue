@@ -161,13 +161,23 @@
         </div>
         <div class="dashboard__actions">
           <div class="farm-selector">
-            <label for="dashboard-farm">Farm</label>
+            <label>Farm</label>
             <label id="dashboard-farm-name">{{
               selectedFarm?.farm_name ||
               selectedFarm?.name ||
               "No Farm Selected"
             }}</label>
           </div>
+
+          <DeviceSelector 
+            v-if="userDevices.length > 1"
+            v-model="selectedDeviceId"
+            label="Device"
+            :show-all-option="true"
+            all-value="__all__"
+            :auto-fetch="false"
+            :custom-devices="userDevices"
+          />
 
           <button
             @click="refreshData"
@@ -217,65 +227,65 @@
 
         <div class="charts-grid">
           <ChartCard
-            :title="`pH Level (${chartTimeRangeLabel})`"
+            title="pH Level"
             :data="phData"
             chart-type="area"
             :color="chartColors.ph"
             :optimal-range="chartRanges.ph"
             :loading="loading"
-            @range-change="handleChartRangeChange"
+            @range-change="(r) => handleChartRangeChange('ph', r)"
           />
 
           <ChartCard
-            :title="`Temperature (${chartTimeRangeLabel})`"
+            title="Water Temperature"
             :data="temperatureData"
             chart-type="line"
             :color="chartColors.temperature"
             :optimal-range="chartRanges.temperature"
             :loading="loading"
-            @range-change="handleChartRangeChange"
+            @range-change="(r) => handleChartRangeChange('temperature', r)"
           />
         </div>
 
         <div class="charts-grid">
           <ChartCard
-            :title="`Light Intensity (${chartTimeRangeLabel})`"
+            title="Light Intensity"
             :data="lightData"
             chart-type="area"
             :color="chartColors.light"
             :optimal-range="chartRanges.light"
             :loading="loading"
-            @range-change="handleChartRangeChange"
+            @range-change="(r) => handleChartRangeChange('light', r)"
           />
 
           <ChartCard
-            :title="`Electrical Conductivity (${chartTimeRangeLabel})`"
+            title="Electrical Conductivity"
             :data="ecData"
             chart-type="line"
             :color="chartColors.ec"
             :optimal-range="chartRanges.ec"
             :loading="loading"
-            @range-change="handleChartRangeChange"
+            @range-change="(r) => handleChartRangeChange('ec', r)"
           />
 
           <ChartCard
-            :title="`Total Dissolved Solids (${chartTimeRangeLabel})`"
+            title="Total Dissolved Solids"
             :data="tdsData"
             chart-type="line"
             :color="chartColors.tds"
             :optimal-range="chartRanges.tds"
             :loading="loading"
-            @range-change="handleChartRangeChange"
+            @range-change="(r) => handleChartRangeChange('tds', r)"
           />
 
           <ChartCard
-            :title="`Air Humidity (${chartTimeRangeLabel})`"
+            title="Air Humidity"
             :data="humidityData"
             chart-type="line"
             :color="chartColors.humidity"
             :optimal-range="chartRanges.humidity"
             :loading="loading"
-            @range-change="handleChartRangeChange"
+            @range-change="(r) => handleChartRangeChange('humidity', r)"
           />
         </div>
 
@@ -318,6 +328,7 @@ import {
   User,
   Cloud,
 } from "lucide-vue-next";
+import apiService from "@/services/api";
 import { useSensorDataStore } from "@/stores/module/sensorData";
 import { useDevicesStore } from "@/stores/module/devices";
 import { useAlertsStore } from "@/stores/module/alerts";
@@ -327,6 +338,7 @@ import { THRESHOLDS, updateThresholdsFromConfig } from "@/utils/thresholds";
 import { getTimeAgo } from "@/utils/sensorHelpers";
 import MetricCard from "@/components/Dashboard/MetricCard.vue";
 import ChartCard from "@/components/Dashboard/ChartCard.vue";
+import DeviceSelector from "@/components/Common/DeviceSelector.vue";
 import EmptyState from "@/components/Common/EmptyState.vue";
 import AlertItem from "@/components/Alerts/AlertItem.vue";
 
@@ -341,6 +353,7 @@ export default {
     User,
     MetricCard,
     ChartCard,
+    DeviceSelector,
     AlertItem,
     EmptyState,
   },
@@ -351,7 +364,16 @@ export default {
     const farmsStore = useFarmsStore();
 
     const loading = ref(false);
-    const chartTimeRange = ref("24h");
+    // Per-chart independent time ranges
+    const chartTimeRanges = ref({
+      ph: "1h",
+      temperature: "1h",
+      light: "1h",
+      ec: "1h",
+      tds: "1h",
+      humidity: "1h",
+    });
+    const selectedDeviceId = ref("__all__");
     const userRole = ref(localStorage.getItem("user_role") || "farmer");
     const isAdmin = computed(() => userRole.value === "admin");
     const adminStats = ref({
@@ -373,30 +395,19 @@ export default {
       set: (value) => farmsStore.selectFarm(value),
     });
 
-    const chartTimeRangeLabel = computed(() => {
-      switch (chartTimeRange.value) {
-        case "24h":
-          return "24 Hours";
-        case "7d":
-          return "7 Days";
-        case "15d":
-          return "15 Days";
-        case "30d":
-          return "30 Days";
-        case "all":
-          return "All Time";
-        default:
-          return "24 Hours";
-      }
-    });
-
     const hasDevice = computed(() => (devicesStore.devices || []).length > 0);
     const userDevices = computed(() => devicesStore.devices || []);
 
-    const aggregatedReading = computed(() => {
-      if (userDevices.value.length === 0) return null;
+    // Devices to show data for (filtered by device selector)
+    const activeDevices = computed(() => {
+      if (selectedDeviceId.value === "__all__") return userDevices.value;
+      return userDevices.value.filter(d => d.device_id === selectedDeviceId.value);
+    });
 
-      const readings = userDevices.value
+    const aggregatedReading = computed(() => {
+      if (activeDevices.value.length === 0) return null;
+
+      const readings = activeDevices.value
         .map((device) => sensorDataStore.getLatestReading(device.device_id))
         .filter((reading) => reading != null);
 
@@ -449,7 +460,7 @@ export default {
         },
         ec: {
           value: avg(
-            (readings || []).map((r) => r?.ec?.value || 0).filter((v) => v > 0),
+            (readings || []).map((r) => (r?.ec?.value || 0) / 1000).filter((v) => v > 0),
           ),
           status: "normal",
         },
@@ -579,10 +590,10 @@ export default {
         {
           id: "ec_value",
           title: "Electrical Conductivity",
-          value: reading.ec?.value?.toFixed(2) ?? "--",
+          value: (reading.ec?.value ? (reading.ec.value / 1000).toFixed(2) : "--"),
           unit: "mS/cm",
           icon: "Activity",
-          status: metricStatus("ec_value", reading.ec?.value),
+            status: metricStatus("ec_value", (reading.ec?.value || 0) / 1000),
           trend: null,
           rangeMin: THRESHOLDS.ec_value.min,
           rangeMax: THRESHOLDS.ec_value.max,
@@ -615,61 +626,52 @@ export default {
       ];
     });
 
-    const historicalData = computed(() => {
-      if (!userDevices.value || userDevices.value.length === 0) return [];
-
-      // Aggregate historical data from all devices
-      const allData = userDevices.value.flatMap(
+    // Per-metric historical data — each uses its own time range
+    const getHistoricalByRange = (metricKey) => {
+      if (!activeDevices.value || activeDevices.value.length === 0) return [];
+      return activeDevices.value.flatMap(
         (device) =>
           sensorDataStore.getHistoricalData(
             device.device_id,
-            chartTimeRange.value,
+            chartTimeRanges.value[metricKey],
           ) || [],
       );
-
-      return allData;
-    });
+    };
 
     const phData = computed(() =>
-      (historicalData.value || [])
-        .filter((reading) => reading?.ph?.value !== undefined)
-        .map((reading) => ({ x: reading.timestamp, y: reading.ph.value })),
+      getHistoricalByRange("ph")
+        .filter((r) => r?.ph?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.ph.value }))
     );
 
     const temperatureData = computed(() =>
-      (historicalData.value || [])
-        .filter((reading) => reading?.temperature_water_c?.value !== undefined)
-        .map((reading) => ({
-          x: reading.timestamp,
-          y: reading.temperature_water_c.value,
-        })),
+      getHistoricalByRange("temperature")
+        .filter((r) => r?.temperature_water_c?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.temperature_water_c.value }))
     );
 
     const lightData = computed(() =>
-      (historicalData.value || [])
-        .filter((reading) => reading?.light_intensity?.value !== undefined)
-        .map((reading) => ({
-          x: reading.timestamp,
-          y: reading.light_intensity.value,
-        })),
+      getHistoricalByRange("light")
+        .filter((r) => r?.light_intensity?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.light_intensity.value }))
     );
 
     const ecData = computed(() =>
-      (historicalData.value || [])
-        .filter((reading) => reading?.ec?.value !== undefined)
-        .map((reading) => ({ x: reading.timestamp, y: reading.ec.value })),
+      getHistoricalByRange("ec")
+        .filter((r) => r?.ec?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.ec.value / 1000 }))
     );
 
     const tdsData = computed(() =>
-      (historicalData.value || [])
-        .filter((reading) => reading?.tds?.value !== undefined)
-        .map((reading) => ({ x: reading.timestamp, y: reading.tds.value })),
+      getHistoricalByRange("tds")
+        .filter((r) => r?.tds?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.tds.value }))
     );
 
     const humidityData = computed(() =>
-      (historicalData.value || [])
-        .filter((reading) => reading?.humidity?.value !== undefined)
-        .map((reading) => ({ x: reading.timestamp, y: reading.humidity.value })),
+      getHistoricalByRange("humidity")
+        .filter((r) => r?.humidity?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.humidity.value }))
     );
 
     const recentAlerts = computed(() => {
@@ -689,7 +691,7 @@ export default {
       loading.value = true;
       try {
         // Step 1: Fetch devices for the selected farm
-        await devicesStore.fetchDevices(selectedFarmId.value);
+        await devicesStore.fetchDevices({ farmId: selectedFarmId.value });
         const devices = devicesStore.devices || [];
 
         if (devices.length === 0) {
@@ -711,14 +713,18 @@ export default {
         }
 
         // Step 3: Fetch sensor data for ALL devices + alerts in parallel
+        // Fetch historical data for each metric's own time range
+        const metricKeys = ["ph", "temperature", "light", "ec", "tds", "humidity"];
         await Promise.all([
           ...devices.map((device) =>
             sensorDataStore.fetchLatestReadings(device.device_id)
           ),
-          ...devices.map((device) =>
-            sensorDataStore.fetchHistoricalData(device.device_id, {
-              range: chartTimeRange.value,
-            })
+          ...devices.flatMap((device) =>
+            metricKeys.map((key) =>
+              sensorDataStore.fetchHistoricalData(device.device_id, {
+                range: chartTimeRanges.value[key],
+              })
+            )
           ),
           alertsStore.fetchAlerts(),
         ]);
@@ -739,28 +745,18 @@ export default {
       }
     };
 
-    const handleChartRangeChange = async (range) => {
-      chartTimeRange.value = range;
-      if (userDevices.value && userDevices.value.length > 0) {
-        loading.value = true;
-        try {
-          // Fetch historical data for all user devices
-          await Promise.all(
-            userDevices.value.map((device) =>
-              sensorDataStore.fetchHistoricalData(device.device_id, { range }),
-            ),
-          );
-          // Resubscribe to devices with new range
-          if (websocketService.isConnected()) {
-            userDevices.value.forEach((device) => {
-              websocketService.subscribeToDevice(device.device_id);
-            });
-          }
-        } catch (error) {
-          console.error("Error fetching historical data:", error);
-        } finally {
-          loading.value = false;
-        }
+    const handleChartRangeChange = async (metricKey, range) => {
+      chartTimeRanges.value[metricKey] = range;
+      const devicesToFetch = activeDevices.value;
+      if (devicesToFetch.length === 0) return;
+      try {
+        await Promise.all(
+          devicesToFetch.map((device) =>
+            sensorDataStore.fetchHistoricalData(device.device_id, { range }),
+          ),
+        );
+      } catch (error) {
+        console.error("Error fetching historical data:", error);
       }
     };
 
@@ -918,8 +914,10 @@ export default {
       hasDevice,
       loading,
       realtimeConnected,
-      chartTimeRange,
-      chartTimeRangeLabel,
+      chartTimeRanges,
+      selectedDeviceId,
+      userDevices,
+      activeDevices,
       chartColors,
       chartRanges,
       metrics,
@@ -927,6 +925,8 @@ export default {
       temperatureData,
       lightData,
       ecData,
+      tdsData,
+      humidityData,
       recentAlerts,
       refreshData,
       handleResolveAlert,
@@ -994,6 +994,29 @@ export default {
   padding: 0.5rem 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 0.5rem;
+}
+
+.device-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.device-filter label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+
+.device-select {
+  min-width: 160px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  background: white;
+  cursor: pointer;
 }
 
 .dashboard-empty {

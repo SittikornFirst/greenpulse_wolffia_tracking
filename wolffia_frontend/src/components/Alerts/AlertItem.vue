@@ -3,8 +3,8 @@
     :class="[
       'alert-item',
       {
-        'alert-item--resolved': alert.resolved,
-        'alert-item--caution': !alert.resolved,
+        'alert-item--resolved': alert.status === 'resolved',
+        'alert-item--caution': alert.status !== 'resolved',
       },
     ]"
   >
@@ -16,28 +16,31 @@
       <div class="alert-item__meta">
         <span class="alert-item__time">
           <Clock :size="14" />
-          {{ formatTime(alert.time || alert.timestamp) }}
+          {{ formatTime(alert.created_at || alert.time || alert.timestamp) }}
         </span>
 
-        <span v-if="alert.device" class="alert-item__device">
+        <span v-if="alert.device_id || alert.device" class="alert-item__device">
           <Cpu :size="14" />
-          Device: {{ alert.device }}
+          {{ alert.device_id || alert.device }}
         </span>
 
-        <span v-if="alert.resolved" class="alert-item__resolved">
+        <span v-if="alert.status === 'resolved'" class="alert-item__resolved">
           <CheckCircle :size="14" />
           Resolved
         </span>
       </div>
 
-      <p v-if="alert.description" class="alert-item__description">
-        {{ alert.description }}
+      <p v-if="alert.parameter || alert.alert_type" class="alert-item__parameter">
+        <strong>{{ formatParameter(alert.parameter || alert.alert_type) }}</strong>
+      </p>
+      <p v-if="alert.message || alert.description" class="alert-item__description">
+        {{ alert.message || alert.description }}
       </p>
     </div>
 
     <div class="alert-item__actions">
       <button
-        v-if="!alert.resolved && showDetails"
+        v-if="alert.status !== 'resolved' && showDetails"
         @click="handleResolve"
         :disabled="resolving"
         class="btn btn--resolve"
@@ -55,7 +58,7 @@
       </button>
 
       <button
-        v-if="allowDelete || (alert.resolved && showDetails)"
+        v-if="allowDelete || (alert.status === 'resolved' && showDetails)"
         @click="handleDelete"
         :disabled="deleting"
         class="btn btn--danger"
@@ -135,12 +138,22 @@ export default {
       });
     };
 
+    const formatParameter = (param) => {
+      if (!param) return "";
+      return param
+        .replace(/_/g, " ")
+        .replace(/\b(ph)\b/gi, "pH")
+        .replace(/\b(ec)\b/gi, "EC")
+        .replace(/\b(tds)\b/gi, "TDS")
+        .replace(/\b([a-z])/g, (c) => c.toUpperCase());
+    };
+
     const handleResolve = async () => {
       if (resolving.value) return;
 
       resolving.value = true;
       try {
-        await emit("resolve", props.alert.id);
+        await emit("resolve", props.alert._id || props.alert.id);
       } catch (error) {
         console.error("Error resolving alert:", error);
       } finally {
@@ -157,7 +170,7 @@ export default {
 
       deleting.value = true;
       try {
-        await emit("delete", props.alert.id);
+        await emit("delete", props.alert._id || props.alert.id);
       } catch (error) {
         console.error("Error deleting alert:", error);
       } finally {
@@ -170,6 +183,7 @@ export default {
       deleting,
       alertIcon,
       formatTime,
+      formatParameter,
       handleResolve,
       handleDelete,
     };
@@ -281,6 +295,13 @@ export default {
 .alert-item__resolved {
   color: #059669;
   font-weight: 500;
+}
+
+.alert-item__parameter {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #d97706;
+  margin: 0 0 0.25rem 0;
 }
 
 .alert-item__description {

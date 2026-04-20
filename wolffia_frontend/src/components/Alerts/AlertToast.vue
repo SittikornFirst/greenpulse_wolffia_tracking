@@ -23,7 +23,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { AlertCircle, X } from "lucide-vue-next";
 
 export default {
@@ -39,41 +39,51 @@ export default {
     },
     show: {
       type: Boolean,
-      default: false,
+      default: true,
     },
   },
   emits: ["close"],
   setup(props, { emit }) {
-    const visible = ref(props.show);
+    // Start visible immediately — toast is rendered only when currentToast is set
+    const visible = ref(false);
+    let autoDismissTimer = null;
 
-    const severity = computed(() => {
-      return props.alert?.severity || "caution";
-    });
-
-    const parameter = computed(() => {
-      return props.alert?.parameter || "Unknown";
-    });
-
-    const message = computed(() => {
-      return props.alert?.message || "Alert notification";
-    });
-
-    const deviceName = computed(() => {
-      return (
-        props.alert?.device_name || props.alert?.device || "Unknown Device"
-      );
-    });
+    const severity = computed(() => props.alert?.severity || "caution");
+    const parameter = computed(() => props.alert?.parameter || props.alert?.alert_type || "Unknown");
+    const message = computed(() => props.alert?.message || "Alert notification");
+    const deviceName = computed(() =>
+      props.alert?.device_name || props.alert?.device_id || props.alert?.device || "Unknown Device"
+    );
 
     const closeToast = () => {
       visible.value = false;
-      setTimeout(() => {
-        emit("close");
-      }, 300); // Wait for animation
+      clearTimeout(autoDismissTimer);
+      setTimeout(() => emit("close"), 300);
     };
 
+    const startAutoDismiss = () => {
+      clearTimeout(autoDismissTimer);
+      autoDismissTimer = setTimeout(closeToast, 6000);
+    };
+
+    // Show as soon as the component is mounted (currentToast was just set)
     onMounted(() => {
       visible.value = true;
+      startAutoDismiss();
     });
+
+    // React if show prop changes (e.g. parent programmatically hides it)
+    watch(() => props.show, (val) => {
+      if (!val) closeToast();
+    });
+
+    // React to new alert arriving (replaces current toast)
+    watch(() => props.alert, () => {
+      visible.value = true;
+      startAutoDismiss();
+    });
+
+    onUnmounted(() => clearTimeout(autoDismissTimer));
 
     return {
       visible,

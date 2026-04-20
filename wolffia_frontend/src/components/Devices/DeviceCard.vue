@@ -41,33 +41,25 @@
 
     <div class="device-actions">
       <button 
-        v-if="device.status === 'active'"
         @click="viewDetails"
         class="btn btn-primary btn-sm"
       >
         View Details
       </button>
-      
+
       <button 
-        v-if="device.status === 'active'"
-        @click="toggleRelay"
+        @click="toggleStatus"
         class="btn btn-secondary btn-sm"
       >
-        Toggle Relay
+        {{ device.status === 'active' ? 'Deactivate' : 'Activate' }}
       </button>
       
       <button 
-        @click="editDevice"
-        class="btn btn-outline btn-sm"
-      >
-        Edit
-      </button>
-      
-      <button 
+        v-if="device.status === 'inactive'"
         @click="deleteDevice"
         class="btn btn-danger btn-sm"
       >
-        Delete
+        Archive
       </button>
     </div>
   </div>
@@ -84,7 +76,7 @@ export default {
       required: true
     }
   },
-  emits: ["click", "view-details", "toggle-relay", "edit", "delete"],
+  emits: ["click", "view-details", "toggle-relay", "edit", "delete", "toggle-status"],
   setup(props, { emit }) {
     const isEditing = ref(false);
     const isDeleting = ref(false);
@@ -106,9 +98,13 @@ export default {
     const editDevice = () => {
       emit("edit", props.device);
     };
+    
+    const toggleStatus = () => {
+      emit("toggle-status", props.device);
+    };
 
     const deleteDevice = async () => {
-      if (!window.confirm(`Are you sure you want to delete device ${props.device.device_name}?`)) {
+      if (!window.confirm(`Are you sure you want to archive device ${props.device.device_name}?`)) {
         return;
       }
       

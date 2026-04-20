@@ -44,8 +44,11 @@ export default {
     showStatus: { type: Boolean, default: false },
     showAllOption: { type: Boolean, default: false },
     allLabel: { type: String, default: "All Devices" },
+    allValue: { type: String, default: "__all__" },
     autoFetch: { type: Boolean, default: true },
-    disabled: { type: Boolean, default: false }
+    disabled: { type: Boolean, default: false },
+    // Optional: provide a pre-filtered device list instead of all store devices
+    customDevices: { type: Array, default: null }
   },
   emits: ["update:modelValue", "change", "devices-loaded"],
   setup(props, { emit }) {
@@ -55,10 +58,11 @@ export default {
     const selectorId = computed(() => `device-selector-${Math.random().toString(36).substr(2, 9)}`);
 
     const devices = computed(() => {
+      const source = props.customDevices !== null ? props.customDevices : (devicesStore.devices || []);
       if (props.showAllOption) {
-        return [{ device_id: "__all__", device_name: props.allLabel, status: "all" }, ...devicesStore.devices];
+        return [{ device_id: props.allValue, device_name: props.allLabel, status: "all" }, ...source];
       }
-      return devicesStore.devices || [];
+      return source;
     });
 
     const selectedId = computed({

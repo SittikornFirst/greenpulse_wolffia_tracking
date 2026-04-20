@@ -8,11 +8,9 @@
       <div class="header-actions">
         <div class="control-group">
           <DeviceSelector
-            v-if="hasDevices"
             v-model="selectedDeviceId"
             label="Device"
-            :show-placeholder="true"
-            placeholder="Select a device..."
+            :show-placeholder="false"
           />
           <div class="entries-selector">
             <label for="analytics-time">Time Range</label>
@@ -118,6 +116,7 @@
 
 <script>
 import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import {
   RefreshCw,
   MapPin,
@@ -159,6 +158,7 @@ export default {
     const sensorDataStore = useSensorDataStore();
     const devicesStore = useDevicesStore();
     const farmsStore = useFarmsStore();
+    const route = useRoute();
 
     const loading = ref(false);
     const allTableRows = ref([]);
@@ -457,7 +457,12 @@ export default {
     onMounted(async () => {
       await devicesStore.fetchDevices({ page: 1, limit: 100 });
       if (devices.value.length > 0) {
-        selectedDeviceId.value = devices.value[0].device_id;
+        if (route.query.deviceId) {
+          const deviceExists = devices.value.some(d => d.device_id === route.query.deviceId || d.id === route.query.deviceId);
+          selectedDeviceId.value = deviceExists ? route.query.deviceId : devices.value[0].device_id;
+        } else {
+          selectedDeviceId.value = devices.value[0].device_id;
+        }
         await refreshData();
       }
     });
@@ -595,7 +600,6 @@ export default {
   border-right: 1px solid #e5e7eb;
 }
 
-.device-selector,
 .entries-selector {
   display: flex;
   flex-direction: column;
@@ -603,7 +607,6 @@ export default {
   min-width: 120px;
 }
 
-.device-selector label,
 .entries-selector label {
   font-size: 0.7rem;
   font-weight: 700;

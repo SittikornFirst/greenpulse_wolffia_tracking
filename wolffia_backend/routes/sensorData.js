@@ -25,8 +25,12 @@ const attachVirtualMetrics = (reading) => {
   ];
 
   metricMap.forEach(({ field, alias }) => {
-    if (reading[field] !== undefined) {
-      reading[alias] = { value: reading[field], status: "normal" };
+    if (reading[field] !== undefined && reading[field] !== null) {
+      let val = Number(reading[field]);
+      if (alias === 'ec' && !isNaN(val) && val > 20) {
+        val = val / 1000;
+      }
+      reading[alias] = { value: val, status: "normal" };
     }
   });
 
@@ -144,8 +148,14 @@ router.post("/", async (req, res) => {
     };
 
     const phValue = parseValue(req.body.ph_value ?? req.body.ph);
-    const ecValue = parseValue(req.body.ec_value ?? req.body.ec);
+    let ecValue = parseValue(req.body.ec_value ?? req.body.ec);
     const tdsValueInput = parseValue(req.body.tds_value ?? req.body.tds);
+    
+    // Automatically convert EC from µS/cm to mS/cm if value is large
+    if (ecValue > 20) {
+      ecValue = ecValue / 1000;
+    }
+
     const waterTemp = parseValue(
       req.body.water_temperature_c ?? req.body.temperature_water_c
     );
@@ -163,7 +173,7 @@ router.post("/", async (req, res) => {
       ec_value: ecValue,
       tds_value:
         tdsValueInput ??
-        (ecValue ? Number((ecValue * 0.64).toFixed(2)) : undefined),
+        (ecValue ? Number((ecValue * 640).toFixed(2)) : undefined),
       water_temperature_c: waterTemp,
       air_temperature_c: airTemp,
       air_humidity: airHumidity,
@@ -378,12 +388,15 @@ router.get("/:deviceId/history", async (req, res) => {
     if (range && range !== "all") {
       const now = new Date();
       const ranges = {
-        "1h": 60 * 60 * 1000,
-        "6h": 6 * 60 * 60 * 1000,
+        "1h":  60 * 60 * 1000,
+        "4h":  4 * 60 * 60 * 1000,
+        "12h": 12 * 60 * 60 * 1000,
         "24h": 24 * 60 * 60 * 1000,
-        "7d": 7 * 24 * 60 * 60 * 1000,
+        "5d":  5 * 24 * 60 * 60 * 1000,
+        "7d":  7 * 24 * 60 * 60 * 1000,
+        "15d": 15 * 24 * 60 * 60 * 1000,
         "30d": 30 * 24 * 60 * 60 * 1000,
-        "1y": 365 * 24 * 60 * 60 * 1000,
+        "1y":  365 * 24 * 60 * 60 * 1000,
       };
       if (ranges[range]) {
         startTime = new Date(now - ranges[range]);

@@ -19,7 +19,8 @@ const normalizeReading = (reading) => {
     normalized.ph = { value: reading.ph_value, status: "normal" };
   }
   if (reading.ec_value !== undefined && !reading.ec) {
-    normalized.ec = { value: reading.ec_value, status: "normal" };
+    const ecInMs = reading.ec_value >= 100 ? reading.ec_value / 1000 : reading.ec_value;
+    normalized.ec = { value: ecInMs, status: "normal" };
   }
   if (reading.tds_value !== undefined && !reading.tds) {
     normalized.tds = { value: reading.tds_value, status: "normal" };
@@ -184,9 +185,11 @@ export const useSensorDataStore = defineStore("sensorData", () => {
   }
 
   async function fetchHistoricalData(deviceId, options = {}) {
-    const { range = "24h", startDate, endDate } = options;
+    const { range = "1h", startDate, endDate } = options;
     loading.value = true;
     error.value = null;
+
+    const rangeLimits = { "1h": 200, "4h": 400, "12h": 500, "24h": 500, "5d": 500, "7d": 500, "15d": 500, "30d": 500, "all": 500 };
 
     try {
       const response = await apiService.getHistoricalData(deviceId, {
@@ -194,7 +197,7 @@ export const useSensorDataStore = defineStore("sensorData", () => {
         startDate,
         endDate,
         page: options.page,
-        limit: options.limit,
+        limit: options.limit || rangeLimits[range] || 200,
       });
 
       const resData = response.data;

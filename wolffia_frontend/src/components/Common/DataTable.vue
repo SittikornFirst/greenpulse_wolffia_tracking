@@ -42,7 +42,7 @@
                 <span v-if="column.sortable" class="sort-icon">
                   <ChevronUp v-if="sortKey === column.key && sortOrder === 'asc'" :size="14" />
                   <ChevronDown v-else-if="sortKey === column.key && sortOrder === 'desc'" :size="14" />
-                  < ChevronsUpDown v-else :size="14" class="sort-icon-inactive" />
+                  <ChevronsUpDown v-else :size="14" class="sort-icon-inactive" />
                 </span>
               </div>
             </th>
@@ -119,13 +119,20 @@ export default {
 
     const totalPages = computed(() => Math.ceil(props.data.length / props.pageSize));
 
+    const unwrap = (val) => {
+      if (val !== null && typeof val === "object" && "value" in val) return val.value;
+      return val;
+    };
+
     const sortedData = computed(() => {
       if (!sortKey.value) return props.data;
-      
+
       return [...props.data].sort((a, b) => {
-        const aVal = getNestedValue(a, sortKey.value);
-        const bVal = getNestedValue(b, sortKey.value);
-        
+        const aVal = unwrap(getNestedValue(a, sortKey.value));
+        const bVal = unwrap(getNestedValue(b, sortKey.value));
+
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
         if (aVal < bVal) return sortOrder.value === "asc" ? -1 : 1;
         if (aVal > bVal) return sortOrder.value === "asc" ? 1 : -1;
         return 0;

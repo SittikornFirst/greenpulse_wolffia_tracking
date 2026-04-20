@@ -98,6 +98,7 @@
         @toggle-relay="openConfigModal(device)"
         @edit="openEditModal(device)"
         @delete="handleArchiveDevice(device)"
+        @toggle-status="handleToggleDeviceStatus(device)"
       />
     </div>
     

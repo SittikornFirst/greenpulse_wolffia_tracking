@@ -169,7 +169,7 @@ export default {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       return alertsStore.resolvedAlerts.filter(
-        (alert) => new Date(alert.resolvedAt) >= today
+        (alert) => new Date(alert.resolved_at) >= today
       ).length;
     });
 
@@ -196,20 +196,21 @@ export default {
           : alertsStore.alerts;
 
       if (filterPriority.value) {
-        alerts = alerts.filter((a) => a.type === filterPriority.value);
+        alerts = alerts.filter((a) => a.severity === filterPriority.value);
       }
 
       if (filterDevice.value) {
-        alerts = alerts.filter((a) => a.device === filterDevice.value);
+        alerts = alerts.filter(
+          (a) => a.device_id === filterDevice.value || a.device === filterDevice.value
+        );
       }
 
-      // Sort
+      // Sort — use created_at (backend field) or timestamp
       alerts = [...alerts].sort((a, b) => {
-        if (sortBy.value === "newest") {
-          return new Date(b.timestamp) - new Date(a.timestamp);
-        } else if (sortBy.value === "oldest") {
-          return new Date(a.timestamp) - new Date(b.timestamp);
-        }
+        const aTime = new Date(a.created_at || a.timestamp);
+        const bTime = new Date(b.created_at || b.timestamp);
+        if (sortBy.value === "newest") return bTime - aTime;
+        if (sortBy.value === "oldest") return aTime - bTime;
         return 0;
       });
 

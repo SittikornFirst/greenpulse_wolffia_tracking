@@ -11,18 +11,18 @@ export const useAlertsStore = defineStore("alerts", () => {
   const toastAlerts = ref([]); // Queue of alerts to show as toast
   const currentToast = ref(null); // Currently displayed toast
 
-  // Getters
+  // Getters — backend uses `status: 'resolved'` not a boolean `resolved`
   const unresolvedAlerts = computed(() =>
-    alerts.value.filter((alert) => !alert.resolved)
+    alerts.value.filter((alert) => alert.status !== "resolved")
   );
 
   const resolvedAlerts = computed(() =>
-    alerts.value.filter((alert) => alert.resolved)
+    alerts.value.filter((alert) => alert.status === "resolved")
   );
 
   const alertsByDevice = computed(
     () => (deviceId) =>
-      alerts.value.filter((alert) => alert.device === deviceId)
+      alerts.value.filter((alert) => alert.device_id === deviceId)
   );
 
   const totalUnresolvedCount = computed(() => unresolvedAlerts.value.length);
@@ -39,7 +39,6 @@ export const useAlertsStore = defineStore("alerts", () => {
     try {
       const token = localStorage.getItem("auth_token");
       if (!token) {
-        // Don't make API call if not authenticated
         alerts.value = [];
         return [];
       }
@@ -48,7 +47,6 @@ export const useAlertsStore = defineStore("alerts", () => {
       alerts.value = response.data;
       return response.data;
     } catch (err) {
-      // Don't throw error if it's a 401 - just return empty array
       if (err.response?.status === 401) {
         alerts.value = [];
         return [];
@@ -88,7 +86,9 @@ export const useAlertsStore = defineStore("alerts", () => {
 
     try {
       const response = await apiService.updateAlert(alertId, updates);
-      const index = alerts.value.findIndex((a) => a.id === alertId);
+      const index = alerts.value.findIndex(
+        (a) => (a._id || a.id) === alertId
+      );
       if (index !== -1) {
         alerts.value[index] = { ...alerts.value[index], ...response.data };
       }
@@ -108,12 +108,15 @@ export const useAlertsStore = defineStore("alerts", () => {
 
     try {
       const response = await apiService.resolveAlert(alertId);
-      const index = alerts.value.findIndex((a) => a.id === alertId);
+      // Optimistic update — use backend's status field
+      const index = alerts.value.findIndex(
+        (a) => (a._id || a.id) === alertId
+      );
       if (index !== -1) {
         alerts.value[index] = {
           ...alerts.value[index],
-          resolved: true,
-          resolvedAt: new Date().toISOString(),
+          status: "resolved",
+          resolved_at: new Date().toISOString(),
         };
       }
       return response.data;
@@ -132,7 +135,9 @@ export const useAlertsStore = defineStore("alerts", () => {
 
     try {
       await apiService.deleteAlert(alertId);
-      alerts.value = alerts.value.filter((a) => a.id !== alertId);
+      alerts.value = alerts.value.filter(
+        (a) => (a._id || a.id) !== alertId
+      );
       return true;
     } catch (err) {
       error.value = err.message || "Failed to delete alert";
@@ -145,7 +150,9 @@ export const useAlertsStore = defineStore("alerts", () => {
 
   function addAlert(alert) {
     // Add alert from WebSocket or other source
-    const exists = alerts.value.find((a) => a.id === alert.id);
+    const exists = alerts.value.find(
+      (a) => (a._id || a.id) === (alert._id || alert.id)
+    );
     if (!exists) {
       alerts.value.unshift(alert);
       // Add to toast queue
@@ -164,24 +171,24 @@ export const useAlertsStore = defineStore("alerts", () => {
   }
 
   function dismissToast() {
-    // Remove from queue
     toastAlerts.value.shift();
     currentToast.value = null;
-    // Show next if available
     setTimeout(() => {
       showNextToast();
     }, 300);
   }
 
   function updateLocalAlert(alertId, updates) {
-    const index = alerts.value.findIndex((a) => a.id === alertId);
+    const index = alerts.value.findIndex(
+      (a) => (a._id || a.id) === alertId
+    );
     if (index !== -1) {
       alerts.value[index] = { ...alerts.value[index], ...updates };
     }
   }
 
   function clearResolvedAlerts() {
-    alerts.value = alerts.value.filter((a) => !a.resolved);
+    alerts.value = alerts.value.filter((a) => a.status !== "resolved");
   }
 
   function clearError() {
@@ -205,7 +212,7 @@ export const useAlertsStore = defineStore("alerts", () => {
     const end = new Date(endDate).getTime();
 
     return alerts.value.filter((alert) => {
-      const alertTime = new Date(alert.timestamp).getTime();
+      const alertTime = new Date(alert.created_at || alert.timestamp).getTime();
       return alertTime >= start && alertTime <= end;
     });
   }
@@ -213,7 +220,8 @@ export const useAlertsStore = defineStore("alerts", () => {
   function getRecentAlerts(hours = 24) {
     const cutoff = Date.now() - hours * 60 * 60 * 1000;
     return alerts.value.filter(
-      (alert) => new Date(alert.timestamp).getTime() > cutoff
+      (alert) =>
+        new Date(alert.created_at || alert.timestamp).getTime() > cutoff
     );
   }
 
