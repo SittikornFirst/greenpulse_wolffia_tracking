@@ -59,7 +59,7 @@
         @click="deleteDevice"
         class="btn btn-danger btn-sm"
       >
-        Archive
+        Delete
       </button>
     </div>
   </div>
@@ -104,7 +104,7 @@ export default {
     };
 
     const deleteDevice = async () => {
-      if (!window.confirm(`Are you sure you want to archive device ${props.device.device_name}?`)) {
+      if (!window.confirm(`Are you sure you want to Delete device ${props.device.device_name}?`)) {
         return;
       }
       
@@ -175,6 +175,7 @@ export default {
       viewDetails,
       toggleRelay,
       editDevice,
+      toggleStatus,
       deleteDevice,
       formatMetricKey,
       formatMetricValue,

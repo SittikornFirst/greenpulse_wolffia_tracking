@@ -867,16 +867,14 @@ export default {
         console.error("Error loading dashboard data:", error);
       }
 
-      // Step 3: Setup WebSocket — composable handles connect, event listeners, and subscriptions
-      try {
-        await ws.setup({ autoConnect: true, subscribeToDevices: true });
-      } catch (error) {
-        console.error("Failed to setup WebSocket:", error);
+      // Step 3: Subscribe loaded devices to WebSocket (App.vue manages the connection)
+      if (ws.connected.value) {
+        devicesStore.devices.forEach((d) => ws.subscribeToDevice(d.device_id));
       }
     });
 
     onUnmounted(() => {
-      ws.cleanup();
+      // Connection lifecycle is managed by App.vue; nothing to clean up here
     });
 
     const selectedFarm = computed(() => {

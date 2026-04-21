@@ -25,6 +25,8 @@
 import { ref, computed, watch, onMounted } from "vue";
 import { useRoute } from "vue-router";
 import { useAlertsStore } from "@/stores/module/alerts";
+import { useAuthStore } from "@/stores/module/auth";
+import { useWebSocket } from "@/composables/useWebSocket";
 
 import DefaultLayout from "@/components/layouts/DefaultLayout.vue";
 import AuthLayout from "@/components/layouts/AuthLayout.vue";
@@ -43,6 +45,8 @@ export default {
     const route = useRoute();
     const darkMode = ref(false);
     const alertsStore = useAlertsStore();
+    const authStore = useAuthStore();
+    const ws = useWebSocket();
 
     // Determine layout based on route meta
     const layoutComponent = computed(() => {
@@ -72,16 +76,22 @@ export default {
       localStorage.setItem("darkMode", newValue.toString());
     });
 
-    // Fetch alerts on app mount
+    // Setup global WebSocket and fetch alerts on app mount
     onMounted(async () => {
-      const token = localStorage.getItem("auth_token");
-      if (token) {
+      if (authStore.isAuthenticated) {
         try {
-          await alertsStore.fetchAlerts(); // Fetch all alerts globally
+          await alertsStore.fetchAlerts();
+          // Keep WebSocket alive across all routes so AlertToast works everywhere
+          await ws.setup({ autoConnect: true, subscribeToDevices: false });
         } catch (error) {
-          console.error("Failed to fetch alerts on startup:", error);
+          console.error("Failed to initialize app services:", error);
         }
       }
+    });
+
+    // Disconnect WebSocket when user logs out
+    watch(() => authStore.isAuthenticated, (isAuth) => {
+      if (!isAuth) ws.cleanup();
     });
 
     loadDarkModePreference();

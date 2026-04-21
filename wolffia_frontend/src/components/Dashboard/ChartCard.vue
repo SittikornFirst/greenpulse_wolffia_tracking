@@ -27,7 +27,7 @@
       </div>
     </div>
 
-    <div v-if="loading" class="chart-card__loading">
+    <div v-if="loading || rangeLoading" class="chart-card__loading">
       <div class="spinner"></div>
       <p>Loading data...</p>
     </div>
@@ -171,6 +171,7 @@ export default {
     const selectedRange = ref("1h");
     const menuOpen      = ref(false);
     const rangeControlRef = ref(null);
+    const rangeLoading  = ref(false);
 
     const timeRanges = TIME_RANGES;
 
@@ -311,11 +312,13 @@ export default {
     const selectTimeRange = (range) => {
       selectedRange.value = range;
       menuOpen.value = false;
+      rangeLoading.value = true;
       emit("range-change", range);
     };
 
-    // Rebuild chart when display data changes
+    // Rebuild chart when display data changes; also clears per-range loading
     watch(displayData, () => {
+      rangeLoading.value = false;
       if (hasData.value && !props.loading) createChart();
     }, { deep: true });
 
@@ -332,6 +335,7 @@ export default {
       rangeControlRef,
       selectedRange,
       menuOpen,
+      rangeLoading,
       timeRanges,
       currentRangeLabel,
       hasData,

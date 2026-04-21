@@ -119,7 +119,6 @@
                                 <th>EC</th>
                                 <th>TDS</th>
                                 <th>Light</th>
-                                <th>Status</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -128,18 +127,13 @@
                                     <Clock :size="12" class="td-ts-icon" />
                                     {{ formatLogTime(row.timestamp || row.created_at) }}
                                 </td>
-                                <td>{{ fmtVal(row.ph_value) }}</td>
-                                <td>{{ fmtVal(row.water_temperature_c, 1) }}</td>
-                                <td>{{ fmtVal(row.air_temperature_c, 1) }}</td>
-                                <td>{{ fmtVal(row.air_humidity, 1) }}{{ row.air_humidity != null ? '%' : '' }}</td>
-                                <td>{{ fmtVal(row.ec_value) }}</td>
-                                <td>{{ fmtVal(row.tds_value, 0) }}</td>
-                                <td>{{ fmtVal(row.light_intensity, 0) }}</td>
-                                <td>
-                                    <span :class="['log-badge', row.quality_flag === 'valid' ? 'log-badge--ok' : 'log-badge--warn']">
-                                        {{ row.quality_flag === 'valid' ? 'Normal' : 'Abnormal' }}
-                                    </span>
-                                </td>
+                                <td :style="{ color: getValueColor('ph_value', row.ph_value), fontWeight: 600 }">{{ fmtVal(row.ph_value) }}</td>
+                                <td :style="{ color: getValueColor('water_temperature_c', row.water_temperature_c), fontWeight: 600 }">{{ fmtVal(row.water_temperature_c, 1) }}</td>
+                                <td :style="{ color: getValueColor('air_temperature_c', row.air_temperature_c), fontWeight: 600 }">{{ fmtVal(row.air_temperature_c, 1) }}</td>
+                                <td :style="{ color: getValueColor('air_humidity', row.air_humidity), fontWeight: 600 }">{{ fmtVal(row.air_humidity, 1) }}{{ row.air_humidity != null ? '%' : '' }}</td>
+                                <td :style="{ color: getValueColor('ec_value', row.ec_value), fontWeight: 600 }">{{ fmtVal(row.ec_value) }}</td>
+                                <td :style="{ color: getValueColor('tds_value', row.tds_value), fontWeight: 600 }">{{ fmtVal(row.tds_value, 0) }}</td>
+                                <td :style="{ color: getValueColor('light_intensity', row.light_intensity.value), fontWeight: 600 }">{{ fmtVal(row.light_intensity.value, 0) }}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -295,6 +289,7 @@ import {
 } from 'lucide-vue-next';
 import apiService from '@/services/api';
 import { useSensorDataStore } from '@/stores/module/sensorData';
+import { getValueColor } from '@/utils/thresholds';
 import RelayControl from '@/components/Devices/RelayControl.vue';
 import ScheduleManager from '@/components/Devices/ScheduleManager.vue';
 
@@ -539,7 +534,7 @@ export default {
         };
 
         const fmtVal = (v, decimals = 2) => {
-            if (v === null || v === undefined) return '--';
+            if (v === null || v === undefined || isNaN(Number(v))) return '--';
             return Number(v).toFixed(decimals);
         };
 
@@ -590,7 +585,8 @@ export default {
             changeLogPage,
             onTimeRangeChange,
             fmtVal,
-            formatLogTime
+            formatLogTime,
+            getValueColor
         };
     }
 };
@@ -1016,21 +1012,6 @@ export default {
 }
 .td-ts-icon {
     color: #9ca3af;
-}
-.log-badge {
-    padding: 0.15rem 0.5rem;
-    border-radius: 9999px;
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-}
-.log-badge--ok {
-    background: #d1fae5;
-    color: #065f46;
-}
-.log-badge--warn {
-    background: #fee2e2;
-    color: #991b1b;
 }
 .log-pagination {
     display: flex;

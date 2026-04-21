@@ -462,9 +462,6 @@ export default {
         return;
       }
 
-      if (!confirm(`Archive ${device.device_name}? This will hide it from the UI but keep it in the database.`)) {
-        return;
-      }
 
       try {
         await devicesStore.removeDevice(device.device_id);
