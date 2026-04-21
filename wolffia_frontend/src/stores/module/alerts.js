@@ -13,16 +13,16 @@ export const useAlertsStore = defineStore("alerts", () => {
 
   // Getters — backend uses `status: 'resolved'` not a boolean `resolved`
   const unresolvedAlerts = computed(() =>
-    alerts.value.filter((alert) => alert.status !== "resolved")
+    alerts.value.filter((alert) => alert.status !== "resolved"),
   );
 
   const resolvedAlerts = computed(() =>
-    alerts.value.filter((alert) => alert.status === "resolved")
+    alerts.value.filter((alert) => alert.status === "resolved"),
   );
 
   const alertsByDevice = computed(
     () => (deviceId) =>
-      alerts.value.filter((alert) => alert.device_id === deviceId)
+      alerts.value.filter((alert) => alert.device_id === deviceId),
   );
 
   const totalUnresolvedCount = computed(() => unresolvedAlerts.value.length);
@@ -86,9 +86,7 @@ export const useAlertsStore = defineStore("alerts", () => {
 
     try {
       const response = await apiService.updateAlert(alertId, updates);
-      const index = alerts.value.findIndex(
-        (a) => (a._id || a.id) === alertId
-      );
+      const index = alerts.value.findIndex((a) => (a._id || a.id) === alertId);
       if (index !== -1) {
         alerts.value[index] = { ...alerts.value[index], ...response.data };
       }
@@ -109,9 +107,7 @@ export const useAlertsStore = defineStore("alerts", () => {
     try {
       const response = await apiService.resolveAlert(alertId);
       // Optimistic update — use backend's status field
-      const index = alerts.value.findIndex(
-        (a) => (a._id || a.id) === alertId
-      );
+      const index = alerts.value.findIndex((a) => (a._id || a.id) === alertId);
       if (index !== -1) {
         alerts.value[index] = {
           ...alerts.value[index],
@@ -135,9 +131,7 @@ export const useAlertsStore = defineStore("alerts", () => {
 
     try {
       await apiService.deleteAlert(alertId);
-      alerts.value = alerts.value.filter(
-        (a) => (a._id || a.id) !== alertId
-      );
+      alerts.value = alerts.value.filter((a) => (a._id || a.id) !== alertId);
       return true;
     } catch (err) {
       error.value = err.message || "Failed to delete alert";
@@ -151,7 +145,7 @@ export const useAlertsStore = defineStore("alerts", () => {
   function addAlert(alert) {
     // Add alert from WebSocket or other source
     const exists = alerts.value.find(
-      (a) => (a._id || a.id) === (alert._id || alert.id)
+      (a) => (a._id || a.id) === (alert._id || alert.id),
     );
     if (!exists) {
       alerts.value.unshift(alert);
@@ -179,9 +173,7 @@ export const useAlertsStore = defineStore("alerts", () => {
   }
 
   function updateLocalAlert(alertId, updates) {
-    const index = alerts.value.findIndex(
-      (a) => (a._id || a.id) === alertId
-    );
+    const index = alerts.value.findIndex((a) => (a._id || a.id) === alertId);
     if (index !== -1) {
       alerts.value[index] = { ...alerts.value[index], ...updates };
     }
@@ -221,7 +213,7 @@ export const useAlertsStore = defineStore("alerts", () => {
     const cutoff = Date.now() - hours * 60 * 60 * 1000;
     return alerts.value.filter(
       (alert) =>
-        new Date(alert.created_at || alert.timestamp).getTime() > cutoff
+        new Date(alert.created_at || alert.timestamp).getTime() > cutoff,
     );
   }
 

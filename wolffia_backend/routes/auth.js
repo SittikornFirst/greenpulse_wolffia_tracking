@@ -13,6 +13,16 @@ router.post("/register", async (req, res) => {
   try {
     const { user_name, email, password, role, phone } = req.body;
 
+    if (!user_name || typeof user_name !== "string" || !user_name.trim()) {
+      return res.status(400).json({ success: false, message: "user_name is required" });
+    }
+    if (!email || typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({ success: false, message: "email is required" });
+    }
+    if (!password || typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ success: false, message: "password must be at least 6 characters" });
+    }
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res
@@ -75,6 +85,13 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({ success: false, message: "email is required" });
+    }
+    if (!password || typeof password !== "string") {
+      return res.status(400).json({ success: false, message: "password is required" });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
       return res
@@ -87,6 +104,12 @@ router.post("/login", async (req, res) => {
       return res
         .status(401)
         .json({ success: false, message: "Invalid credentials" });
+    }
+
+    if (!user.is_active || user.is_deleted) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Account is inactive or has been removed" });
     }
 
     user.last_login = new Date();

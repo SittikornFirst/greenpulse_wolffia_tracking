@@ -17,7 +17,7 @@ export const authenticate = async (req, res, next) => {
     );
     const user = await User.findById(decoded.userId);
 
-    if (!user || !user.is_active) {
+    if (!user || !user.is_active || user.is_deleted) {
       return res
         .status(401)
         .json({ success: false, message: "User not found or inactive" });

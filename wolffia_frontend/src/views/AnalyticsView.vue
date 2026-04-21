@@ -8,9 +8,11 @@
       <div class="header-actions">
         <div class="control-group">
           <DeviceSelector
+            v-if="hasDevices"
             v-model="selectedDeviceId"
             label="Device"
-            :show-placeholder="false"
+            :show-placeholder="true"
+            placeholder="Select a device..."
           />
           <div class="entries-selector">
             <label for="analytics-time">Time Range</label>
@@ -38,7 +40,11 @@
             </div>
           </div>
         </div>
-        <button @click="refreshData" :disabled="loading" class="btn btn-primary refresh-btn">
+        <button
+          @click="refreshData"
+          :disabled="loading"
+          class="btn btn-primary refresh-btn"
+        >
           <RefreshCw :size="18" :class="{ spin: loading }" />
           <span>Refresh</span>
         </button>
@@ -49,10 +55,15 @@
       <Cpu :size="56" />
       <h3>No devices yet</h3>
       <p>Add a device to view analytics.</p>
-      <router-link to="/devices" class="btn btn-primary">Add Device</router-link>
+      <router-link to="/devices" class="btn btn-primary"
+        >Add Device</router-link
+      >
     </div>
 
-    <div v-else-if="hasDevices && tableRows.length === 0" class="analytics-empty">
+    <div
+      v-else-if="hasDevices && tableRows.length === 0"
+      class="analytics-empty"
+    >
       <Activity :size="48" />
       <h3>No data available</h3>
       <p>This device has no sensor data yet. Waiting for readings...</p>
@@ -89,25 +100,45 @@
           {{ formatTimestamp(value) }}
         </template>
         <template #cell-ph="{ value }">
-          <span :style="{ color: getValueColor('ph_value', value?.value) }">{{ formatValue(value?.value) }}</span>
+          <span :style="{ color: getValueColor('ph_value', value?.value) }">{{
+            formatValue(value?.value)
+          }}</span>
         </template>
         <template #cell-temperature_water_c="{ value }">
-          <span :style="{ color: getValueColor('water_temperature_c', value?.value) }">{{ formatValue(value?.value) }}</span>
+          <span
+            :style="{
+              color: getValueColor('water_temperature_c', value?.value),
+            }"
+            >{{ formatValue(value?.value) }}</span
+          >
         </template>
         <template #cell-temperature_air_c="{ value }">
-          <span :style="{ color: getValueColor('air_temperature_c', value?.value) }">{{ formatValue(value?.value) }}</span>
+          <span
+            :style="{ color: getValueColor('air_temperature_c', value?.value) }"
+            >{{ formatValue(value?.value) }}</span
+          >
         </template>
         <template #cell-humidity="{ value }">
-          <span :style="{ color: getValueColor('air_humidity', value?.value) }">{{ formatValue(value?.value) }}</span>
+          <span
+            :style="{ color: getValueColor('air_humidity', value?.value) }"
+            >{{ formatValue(value?.value) }}</span
+          >
         </template>
         <template #cell-ec="{ value }">
-          <span :style="{ color: getValueColor('ec_value', value?.value) }">{{ formatValue(value?.value) }}</span>
+          <span :style="{ color: getValueColor('ec_value', value?.value) }">{{
+            formatValue(value?.value)
+          }}</span>
         </template>
         <template #cell-tds="{ value }">
-          <span :style="{ color: getValueColor('tds_value', value?.value) }">{{ formatInteger(value?.value) }}</span>
+          <span :style="{ color: getValueColor('tds_value', value?.value) }">{{
+            formatInteger(value?.value)
+          }}</span>
         </template>
         <template #cell-light_intensity="{ value }">
-          <span :style="{ color: getValueColor('light_intensity', value?.value) }">{{ formatInteger(value?.value) }}</span>
+          <span
+            :style="{ color: getValueColor('light_intensity', value?.value) }"
+            >{{ formatInteger(value?.value) }}</span
+          >
         </template>
       </DataTable>
     </template>
@@ -266,7 +297,7 @@ export default {
             ? Number(avgVal).toFixed(1)
             : Math.round(avgVal).toLocaleString();
       };
-      
+
       const getStat = (key, type) => {
         if (!minMaxData.value) return null;
         return minMaxData.value[`${key}_${type}`];
@@ -284,9 +315,9 @@ export default {
         {
           id: "ph",
           title: "Avg pH",
-          value: formatAvg("ph_value", getStat('ph', 'avg') ?? avgPh),
-          valueMin: getStat('ph', 'min'),
-          valueMax: getStat('ph', 'max'),
+          value: formatAvg("ph_value", getStat("ph", "avg") ?? avgPh),
+          valueMin: getStat("ph", "min"),
+          valueMax: getStat("ph", "max"),
           unit: "pH",
           icon: "Droplet",
           status: getValueStatus("ph_value", avgPh),
@@ -296,9 +327,12 @@ export default {
         {
           id: "water_temp",
           title: "Avg Water Temp",
-          value: formatAvg("temperature", getStat('water_temp', 'avg') ?? avgWaterTemp),
-          valueMin: getStat('water_temp', 'min'),
-          valueMax: getStat('water_temp', 'max'),
+          value: formatAvg(
+            "temperature",
+            getStat("water_temp", "avg") ?? avgWaterTemp,
+          ),
+          valueMin: getStat("water_temp", "min"),
+          valueMax: getStat("water_temp", "max"),
           unit: "°C",
           icon: "Thermometer",
           status: getValueStatus("water_temperature_c", avgWaterTemp),
@@ -308,9 +342,12 @@ export default {
         {
           id: "air_temp",
           title: "Avg Air Temp",
-          value: formatAvg("temperature", getStat('air_temp', 'avg') ?? avgAirTemp),
-          valueMin: getStat('air_temp', 'min'),
-          valueMax: getStat('air_temp', 'max'),
+          value: formatAvg(
+            "temperature",
+            getStat("air_temp", "avg") ?? avgAirTemp,
+          ),
+          valueMin: getStat("air_temp", "min"),
+          valueMax: getStat("air_temp", "max"),
           unit: "°C",
           icon: "Thermometer",
           status: getValueStatus("air_temperature_c", avgAirTemp),
@@ -320,9 +357,12 @@ export default {
         {
           id: "humidity",
           title: "Avg Air Humidity",
-          value: formatAvg("humidity", getStat('humidity', 'avg') ?? avgHumidity),
-          valueMin: getStat('humidity', 'min'),
-          valueMax: getStat('humidity', 'max'),
+          value: formatAvg(
+            "humidity",
+            getStat("humidity", "avg") ?? avgHumidity,
+          ),
+          valueMin: getStat("humidity", "min"),
+          valueMax: getStat("humidity", "max"),
           unit: "%",
           icon: "Droplet",
           status: getValueStatus("air_humidity", avgHumidity),
@@ -332,9 +372,9 @@ export default {
         {
           id: "ec",
           title: "Avg EC",
-          value: formatAvg("ec_value", getStat('ec', 'avg') ?? avgEc),
-          valueMin: getStat('ec', 'min'),
-          valueMax: getStat('ec', 'max'),
+          value: formatAvg("ec_value", getStat("ec", "avg") ?? avgEc),
+          valueMin: getStat("ec", "min"),
+          valueMax: getStat("ec", "max"),
           unit: "mS/cm",
           icon: "Activity",
           status: getValueStatus("ec_value", avgEc),
@@ -344,9 +384,9 @@ export default {
         {
           id: "tds",
           title: "Avg TDS",
-          value: formatAvg("tds_value", getStat('tds', 'avg') ?? avgTds),
-          valueMin: getStat('tds', 'min'),
-          valueMax: getStat('tds', 'max'),
+          value: formatAvg("tds_value", getStat("tds", "avg") ?? avgTds),
+          valueMin: getStat("tds", "min"),
+          valueMax: getStat("tds", "max"),
           unit: "ppm",
           icon: "Activity",
           status: getValueStatus("tds_value", avgTds),
@@ -356,9 +396,12 @@ export default {
         {
           id: "light",
           title: "Avg Light",
-          value: formatAvg("light_intensity", getStat('light', 'avg') ?? avgLight),
-          valueMin: getStat('light', 'min'),
-          valueMax: getStat('light', 'max'),
+          value: formatAvg(
+            "light_intensity",
+            getStat("light", "avg") ?? avgLight,
+          ),
+          valueMin: getStat("light", "min"),
+          valueMax: getStat("light", "max"),
           unit: "lux",
           icon: "Sun",
           status: getValueStatus("light_intensity", avgLight),
@@ -384,7 +427,11 @@ export default {
     const visiblePages = computed(() => {
       const pages = [];
       const range = 2;
-      for (let i = Math.max(1, currentPage.value - range); i <= Math.min(totalPages.value, currentPage.value + range); i++) {
+      for (
+        let i = Math.max(1, currentPage.value - range);
+        i <= Math.min(totalPages.value, currentPage.value + range);
+        i++
+      ) {
         pages.push(i);
       }
       return pages;
@@ -403,16 +450,19 @@ export default {
 
         // Update thresholds
         if (device.config_id || device.configuration) {
-          const config = typeof device.config_id === "object" ? device.config_id : device.configuration;
+          const config =
+            typeof device.config_id === "object"
+              ? device.config_id
+              : device.configuration;
           if (config) updateThresholdsFromConfig(config);
         }
 
         const response = await sensorDataStore.fetchHistoricalData(
           device.device_id,
-          { 
-            range: timeRange.value, 
-            page: currentPage.value, 
-            limit: entriesPerPage.value 
+          {
+            range: timeRange.value,
+            page: currentPage.value,
+            limit: entriesPerPage.value,
           },
         );
 
@@ -423,7 +473,8 @@ export default {
         } else {
           allTableRows.value = Array.isArray(response) ? response : [];
           totalEntries.value = allTableRows.value.length;
-          totalPages.value = Math.ceil(totalEntries.value / entriesPerPage.value) || 1;
+          totalPages.value =
+            Math.ceil(totalEntries.value / entriesPerPage.value) || 1;
         }
 
         if (currentPage.value > totalPages.value) {
@@ -440,7 +491,8 @@ export default {
     };
 
     const handlePageChange = (page) => {
-      if (page < 1 || page > totalPages.value || page === currentPage.value) return;
+      if (page < 1 || page > totalPages.value || page === currentPage.value)
+        return;
       currentPage.value = page;
       refreshData();
     };
@@ -458,8 +510,14 @@ export default {
       await devicesStore.fetchDevices({ page: 1, limit: 100 });
       if (devices.value.length > 0) {
         if (route.query.deviceId) {
-          const deviceExists = devices.value.some(d => d.device_id === route.query.deviceId || d.id === route.query.deviceId);
-          selectedDeviceId.value = deviceExists ? route.query.deviceId : devices.value[0].device_id;
+          const deviceExists = devices.value.some(
+            (d) =>
+              d.device_id === route.query.deviceId ||
+              d.id === route.query.deviceId,
+          );
+          selectedDeviceId.value = deviceExists
+            ? route.query.deviceId
+            : devices.value[0].device_id;
         } else {
           selectedDeviceId.value = devices.value[0].device_id;
         }
@@ -586,7 +644,7 @@ export default {
   background: #ffffff;
   padding: 0.5rem;
   border-radius: 1.25rem;
-  box-shadow: 
+  box-shadow:
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
     0 10px 15px -3px rgba(0, 0, 0, 0.1);
   border: 1px solid #f3f4f6;
@@ -600,6 +658,7 @@ export default {
   border-right: 1px solid #e5e7eb;
 }
 
+.device-selector,
 .entries-selector {
   display: flex;
   flex-direction: column;
@@ -607,6 +666,7 @@ export default {
   min-width: 120px;
 }
 
+.device-selector label,
 .entries-selector label {
   font-size: 0.7rem;
   font-weight: 700;
@@ -749,7 +809,7 @@ export default {
 
 .value-cell {
   font-weight: 700;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: "Inter", system-ui, sans-serif;
 }
 
 .timestamp-cell {
@@ -824,8 +884,12 @@ export default {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 1024px) {
@@ -834,7 +898,7 @@ export default {
     flex-direction: column;
     padding: 1.5rem;
   }
-  
+
   .control-group {
     border-right: none;
     border-bottom: 1px solid #e5e7eb;

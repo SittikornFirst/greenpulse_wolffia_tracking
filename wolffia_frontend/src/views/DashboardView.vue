@@ -169,15 +169,23 @@
             }}</label>
           </div>
 
-          <DeviceSelector 
-            v-if="userDevices.length > 1"
-            v-model="selectedDeviceId"
-            label="Device"
-            :show-all-option="true"
-            all-value="__all__"
-            :auto-fetch="false"
-            :custom-devices="userDevices"
-          />
+          <div class="device-filter" v-if="userDevices.length > 1">
+            <label for="dashboard-device">Device</label>
+            <select
+              id="dashboard-device"
+              v-model="selectedDeviceId"
+              class="device-select"
+            >
+              <option value="all">All Devices</option>
+              <option
+                v-for="d in userDevices"
+                :key="d.device_id"
+                :value="d.device_id"
+              >
+                {{ d.device_name || d.name }}
+              </option>
+            </select>
+          </div>
 
           <button
             @click="refreshData"
@@ -193,10 +201,7 @@
       <div v-if="!hasDevice" class="dashboard-empty dashboard-empty--compact">
         <Cpu :size="48" />
         <h3>No device is registered for this farm</h3>
-        <p>
-          Add a device to this farm to start
-          streaming data.
-        </p>
+        <p>Add a device to this farm to start streaming data.</p>
         <router-link to="/devices" class="btn btn--primary">
           Register Device
         </router-link>
@@ -296,12 +301,12 @@
           </div>
 
           <EmptyState
-              v-if="recentAlerts.length === 0"
-              type="no-data"
-              title="All Clear"
-              description="No active alerts. All systems operating normally."
-              :compact="true"
-            />
+            v-if="recentAlerts.length === 0"
+            type="no-data"
+            title="All Clear"
+            description="No active alerts. All systems operating normally."
+            :compact="true"
+          />
 
           <div v-else class="alerts-list">
             <AlertItem
@@ -334,11 +339,11 @@ import { useDevicesStore } from "@/stores/module/devices";
 import { useAlertsStore } from "@/stores/module/alerts";
 import { useFarmsStore } from "@/stores/module/farms";
 import { useWebSocket } from "@/composables/useWebSocket";
+import { useAuthStore } from "@/stores/module/auth";
 import { THRESHOLDS, updateThresholdsFromConfig } from "@/utils/thresholds";
 import { getTimeAgo } from "@/utils/sensorHelpers";
 import MetricCard from "@/components/Dashboard/MetricCard.vue";
 import ChartCard from "@/components/Dashboard/ChartCard.vue";
-import DeviceSelector from "@/components/Common/DeviceSelector.vue";
 import EmptyState from "@/components/Common/EmptyState.vue";
 import AlertItem from "@/components/Alerts/AlertItem.vue";
 
@@ -353,7 +358,6 @@ export default {
     User,
     MetricCard,
     ChartCard,
-    DeviceSelector,
     AlertItem,
     EmptyState,
   },
@@ -362,6 +366,7 @@ export default {
     const devicesStore = useDevicesStore();
     const alertsStore = useAlertsStore();
     const farmsStore = useFarmsStore();
+    const ws = useWebSocket();
 
     const loading = ref(false);
     // Per-chart independent time ranges
@@ -373,9 +378,9 @@ export default {
       tds: "1h",
       humidity: "1h",
     });
-    const selectedDeviceId = ref("__all__");
-    const userRole = ref(localStorage.getItem("user_role") || "farmer");
-    const isAdmin = computed(() => userRole.value === "admin");
+    const selectedDeviceId = ref("all");
+    const authStore = useAuthStore();
+    const isAdmin = computed(() => authStore.isAdmin);
     const adminStats = ref({
       totalUsers: 0,
       totalFarms: 0,
@@ -400,8 +405,10 @@ export default {
 
     // Devices to show data for (filtered by device selector)
     const activeDevices = computed(() => {
-      if (selectedDeviceId.value === "__all__") return userDevices.value;
-      return userDevices.value.filter(d => d.device_id === selectedDeviceId.value);
+      if (selectedDeviceId.value === "all") return userDevices.value;
+      return userDevices.value.filter(
+        (d) => d.device_id === selectedDeviceId.value,
+      );
     });
 
     const aggregatedReading = computed(() => {
@@ -460,7 +467,7 @@ export default {
         },
         ec: {
           value: avg(
-            (readings || []).map((r) => (r?.ec?.value || 0) / 1000).filter((v) => v > 0),
+            (readings || []).map((r) => r?.ec?.value || 0).filter((v) => v > 0),
           ),
           status: "normal",
         },
@@ -510,7 +517,10 @@ export default {
       },
       ec: { min: THRESHOLDS.ec_value.min, max: THRESHOLDS.ec_value.max },
       tds: { min: THRESHOLDS.tds_value.min, max: THRESHOLDS.tds_value.max },
-      humidity: { min: THRESHOLDS.air_humidity.min, max: THRESHOLDS.air_humidity.max },
+      humidity: {
+        min: THRESHOLDS.air_humidity.min,
+        max: THRESHOLDS.air_humidity.max,
+      },
     }));
 
     const metricStatus = (key, value) => {
@@ -590,10 +600,10 @@ export default {
         {
           id: "ec_value",
           title: "Electrical Conductivity",
-          value: (reading.ec?.value ? (reading.ec.value / 1000).toFixed(2) : "--"),
+          value: reading.ec?.value?.toFixed(2) ?? "--",
           unit: "mS/cm",
           icon: "Activity",
-            status: metricStatus("ec_value", (reading.ec?.value || 0) / 1000),
+          status: metricStatus("ec_value", reading.ec?.value),
           trend: null,
           rangeMin: THRESHOLDS.ec_value.min,
           rangeMax: THRESHOLDS.ec_value.max,
@@ -641,37 +651,37 @@ export default {
     const phData = computed(() =>
       getHistoricalByRange("ph")
         .filter((r) => r?.ph?.value !== undefined)
-        .map((r) => ({ x: r.timestamp, y: r.ph.value }))
+        .map((r) => ({ x: r.timestamp, y: r.ph.value })),
     );
 
     const temperatureData = computed(() =>
       getHistoricalByRange("temperature")
         .filter((r) => r?.temperature_water_c?.value !== undefined)
-        .map((r) => ({ x: r.timestamp, y: r.temperature_water_c.value }))
+        .map((r) => ({ x: r.timestamp, y: r.temperature_water_c.value })),
     );
 
     const lightData = computed(() =>
       getHistoricalByRange("light")
         .filter((r) => r?.light_intensity?.value !== undefined)
-        .map((r) => ({ x: r.timestamp, y: r.light_intensity.value }))
+        .map((r) => ({ x: r.timestamp, y: r.light_intensity.value })),
     );
 
     const ecData = computed(() =>
       getHistoricalByRange("ec")
         .filter((r) => r?.ec?.value !== undefined)
-        .map((r) => ({ x: r.timestamp, y: r.ec.value / 1000 }))
+        .map((r) => ({ x: r.timestamp, y: r.ec.value })),
     );
 
     const tdsData = computed(() =>
       getHistoricalByRange("tds")
         .filter((r) => r?.tds?.value !== undefined)
-        .map((r) => ({ x: r.timestamp, y: r.tds.value }))
+        .map((r) => ({ x: r.timestamp, y: r.tds.value })),
     );
 
     const humidityData = computed(() =>
       getHistoricalByRange("humidity")
         .filter((r) => r?.humidity?.value !== undefined)
-        .map((r) => ({ x: r.timestamp, y: r.humidity.value }))
+        .map((r) => ({ x: r.timestamp, y: r.humidity.value })),
     );
 
     const recentAlerts = computed(() => {
@@ -714,22 +724,31 @@ export default {
 
         // Step 3: Fetch sensor data for ALL devices + alerts in parallel
         // Fetch historical data for each metric's own time range
-        const metricKeys = ["ph", "temperature", "light", "ec", "tds", "humidity"];
+        const metricKeys = [
+          "ph",
+          "temperature",
+          "light",
+          "ec",
+          "tds",
+          "humidity",
+        ];
         await Promise.all([
           ...devices.map((device) =>
-            sensorDataStore.fetchLatestReadings(device.device_id)
+            sensorDataStore.fetchLatestReadings(device.device_id),
           ),
           ...devices.flatMap((device) =>
             metricKeys.map((key) =>
               sensorDataStore.fetchHistoricalData(device.device_id, {
                 range: chartTimeRanges.value[key],
-              })
-            )
+              }),
+            ),
           ),
           alertsStore.fetchAlerts(),
         ]);
 
-        console.log(`✅ Dashboard data refreshed for ${devices.length} device(s)`);
+        console.log(
+          `✅ Dashboard data refreshed for ${devices.length} device(s)`,
+        );
       } catch (error) {
         console.error("❌ Error refreshing dashboard data:", error);
       } finally {
@@ -758,20 +777,6 @@ export default {
       } catch (error) {
         console.error("Error fetching historical data:", error);
       }
-    };
-
-    const handleSensorReading = (reading) => {
-      sensorDataStore.updateRealtimeReading(reading);
-    };
-
-    const handleAlert = (alert) => {
-      alertsStore.addAlert(alert);
-    };
-
-    const handleDeviceStatus = (status) => {
-      devicesStore.updateLocalDevice(status.deviceId, {
-        status: status.status,
-      });
     };
 
     // Admin-specific functions
@@ -862,41 +867,16 @@ export default {
         console.error("Error loading dashboard data:", error);
       }
 
-      // Step 3: Setup WebSocket (non-blocking, can fail gracefully)
-      if (!websocketService.isConnected()) {
-        const token = localStorage.getItem("auth_token");
-        if (token) {
-          try {
-            await websocketService.connect(token);
-          } catch (error) {
-            console.error("Failed to connect to WebSocket:", error);
-          }
-        }
-      }
-
-      // Step 4: Register WebSocket event handlers
-      websocketService.on("sensorReading", handleSensorReading);
-      websocketService.on("alert", handleAlert);
-      websocketService.on("deviceStatus", handleDeviceStatus);
-      websocketService.on("connected", () => {
-        sensorDataStore.setRealtimeConnection(true);
-      });
-      websocketService.on("disconnected", () => {
-        sensorDataStore.setRealtimeConnection(false);
-      });
-
-      // Step 5: Subscribe to device updates if connected
-      if (websocketService.isConnected() && userDevices.value.length > 0) {
-        userDevices.value.forEach((device) => {
-          websocketService.subscribeToDevice(device.device_id);
-        });
+      // Step 3: Setup WebSocket — composable handles connect, event listeners, and subscriptions
+      try {
+        await ws.setup({ autoConnect: true, subscribeToDevices: true });
+      } catch (error) {
+        console.error("Failed to setup WebSocket:", error);
       }
     });
 
     onUnmounted(() => {
-      websocketService.off("sensorReading", handleSensorReading);
-      websocketService.off("alert", handleAlert);
-      websocketService.off("deviceStatus", handleDeviceStatus);
+      ws.cleanup();
     });
 
     const selectedFarm = computed(() => {

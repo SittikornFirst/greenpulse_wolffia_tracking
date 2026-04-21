@@ -156,9 +156,17 @@ router.beforeEach((to, from, next) => {
     document.title = "Wolffia Monitoring System";
   }
 
-  // Auth check
-  const isAuthenticated = localStorage.getItem("auth_token");
-  const userRole = localStorage.getItem("user_role");
+  // Auth check - use try/catch for environments without localStorage (SSR, private browsing)
+   let isAuthenticated = false;
+   let userRole = null;
+   try {
+     isAuthenticated = !!localStorage.getItem("auth_token");
+     userRole = localStorage.getItem("user_role");
+   } catch (e) {
+     // localStorage not available (SSR, private mode, etc.)
+     isAuthenticated = false;
+     userRole = null;
+   }
 
   if (to.meta.requiresAuth && !isAuthenticated) {
     next({

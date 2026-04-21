@@ -41,13 +41,14 @@
 <script>
 import { ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import apiService from "@/services/api";
+import { useAuthStore } from "@/stores/module/auth";
 
 export default {
   name: "LoginView",
   setup() {
     const router = useRouter();
     const route = useRoute();
+    const authStore = useAuthStore();
     const form = ref({
       email: "",
       password: "",
@@ -57,20 +58,9 @@ export default {
     const handleLogin = async () => {
       loading.value = true;
       try {
-        const response = await apiService.login(form.value);
-        if (response.data.token) {
-          localStorage.setItem("auth_token", response.data.token);
-          localStorage.setItem(
-            "user_name",
-            response.data.user?.user_name || "User",
-          );
-          localStorage.setItem(
-            "user_role",
-            response.data.user?.role || "farmer",
-          );
-          const redirectPath = route.query.redirect || "/dashboard";
-          router.push(redirectPath);
-        }
+        await authStore.login(form.value);
+        const redirectPath = route.query.redirect || "/dashboard";
+        router.push(redirectPath);
       } catch (error) {
         alert(
           error.response?.data?.message ||

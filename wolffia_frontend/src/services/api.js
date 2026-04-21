@@ -54,32 +54,7 @@ apiClient.interceptors.response.use(
           }
           break;
         case 403:
-          // Forbidden - token valid but no permission
-          console.error("Access forbidden - checking auth");
-          // Should we redirect? If it's a permission issue, maybe not.
-          // But if it's a "User not found" or similar that behaves like 403, maybe yes.
-          // For now, let's treat 403 on critical resources as potential auth failure
-          // or just let the UI handle it.
-          // User request implies "if no cookie return to login", 403 means we HAVE a cookie usually.
-          // But if the user reports 403 loop, maybe valid token but invalid user?
-          // Let's force logout on 403 for now to be safe, or just notification.
-          // Safer to just notify, but user complained about 403.
-          // Let's force logout if it happens on GET /farms which is a core resource.
-          if (
-            error.config.url.includes("/farms") ||
-            error.config.url.includes("/auth/me")
-          ) {
-            console.warn(
-              "Forbidden access to core resource - redirecting to login",
-            );
-            localStorage.removeItem("auth_token");
-            if (routerInstance) {
-              routerInstance.push({
-                path: "/login",
-                query: { redirect: routerInstance.currentRoute.value.fullPath },
-              });
-            }
-          }
+          console.warn("Access forbidden:", error.config?.url);
           break;
         case 404:
           console.error("Resource not found");
@@ -117,8 +92,13 @@ const apiService = {
   },
 
   async logout() {
-    localStorage.removeItem("auth_token");
-    return apiClient.post("/auth/logout");
+    try {
+      await apiClient.post("/auth/logout");
+    } finally {
+      localStorage.removeItem("auth_token");
+      localStorage.removeItem("user_name");
+      localStorage.removeItem("user_role");
+    }
   },
 
   async getCurrentUser() {

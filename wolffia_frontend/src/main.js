@@ -3,6 +3,7 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
+import { useAuthStore } from './stores/module/auth';
 
 // Import global styles
 import './assets/styles/main.css';
@@ -15,6 +16,11 @@ const pinia = createPinia();
 
 // Use plugins
 app.use(pinia);
+
+// Initialize auth state from localStorage before router guard runs
+const authStore = useAuthStore();
+authStore.initFromStorage();
+
 app.use(router);
 
 // Global error handler

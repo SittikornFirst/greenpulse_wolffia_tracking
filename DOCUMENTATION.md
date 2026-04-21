@@ -1,679 +1,551 @@
-# GreenPulse Monitor - Technical Documentation
+# Wolffia IoT Tracking — System Documentation
 
-## Table of Contents
+## Project Overview
 
-1. [System Architecture](#system-architecture)
-2. [Hardware Details](#hardware-details)
-3. [Software Architecture](#software-architecture)
-4. [Data Flow](#data-flow)
-5. [Failover Logic](#failover-logic)
-6. [Data Formats](#data-formats)
-7. [Sensor Calibration](#sensor-calibration)
-8. [Time Management](#time-management)
-9. [Deployment Guide](#deployment-guide)
-10. [Troubleshooting](#troubleshooting)
-
----
-
-## System Architecture
+Wolffia is a full-stack IoT monitoring platform for hydroponic farming. ESP32 microcontrollers collect sensor readings (pH, EC, TDS, water temperature, air temperature, humidity, light intensity) and push data to a REST API. Farmers and administrators monitor their devices in real time through a Vue 3 SPA with WebSocket-based live updates.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        GREENPULSE SYSTEM                    │
-├─────────────────────────────────────────────────────────────┤
-│  SENSORS          ESP32 PROCESSING         OUTPUTS          │
-│  ───────          ────────────────         ───────          │
-│                                                             │
-│  ┌─────────┐     ┌──────────────┐      ┌──────────────┐    │
-│  │  AHT30  │────▶│              │      │   MongoDB    │    │
-│  │(Air T/H)│     │   Sensor     │─────▶│   (Cloud)    │    │
-│  └─────────┘     │   Reading    │      └──────────────┘    │
-│                  │              │              ▲            │
-│  ┌─────────┐     │              │              │            │
-│  │  BH1750 │────▶│   Data       │      ┌───────┴──────┐    │
-│  │ (Light) │     │   Processing │      │   SD Card    │    │
-│  └─────────┘     │              │◀─────│  (Failover)  │    │
-│                  │              │      └──────────────┘    │
-│  ┌─────────┐     │   Time       │              ▲            │
-│  │ DS18B20 │────▶│   Management │              │            │
-│  │(Water T)│     │              │      ┌───────┴──────┐    │
-│  └─────────┘     │   Failover   │      │  CSV Logger  │    │
-│                  │   Logic      │─────▶│ (Monthly)    │    │
-│  ┌─────────┐     │              │      └──────────────┘    │
-│  │  pH     │────▶│              │                          │
-│  │(Analog) │     └──────────────┘                          │
-│  └─────────┘                                               │
-│                                                             │
-│  ┌─────────┐                                               │
-│  │  TDS    │────▶                                          │
-│  │(Analog) │                                               │
-│  └─────────┘                                               │
-│                                                             │
-│  ┌─────────┐                                               │
-│  │ DS1302  │────▶ RTC (Real-Time Clock)                    │
-│  │   RTC   │                                               │
-│  └─────────┘                                               │
-└─────────────────────────────────────────────────────────────┘
+ESP32 Sensors  ──POST /api/sensor-data──►  Express + MongoDB Backend
+                                               │
+                                        WebSocket (ws)
+                                               │
+                                    Vue 3 SPA (Vite + Pinia)
 ```
 
 ---
 
-## Hardware Details
+## Tech Stack
 
-### Pin Configuration
-
-| Pin    | Function | Connected To  |
-| ------ | -------- | ------------- |
-| GPIO16 | I2C SDA  | AHT30, BH1750 |
-| GPIO17 | I2C SCL  | AHT30, BH1750 |
-| GPIO4  | OneWire  | DS18B20       |
-| GPIO35 | ADC      | pH Sensor     |
-| GPIO34 | ADC      | TDS Sensor    |
-| GPIO14 | RTC CLK  | DS1302 CLK    |
-| GPIO27 | RTC DAT  | DS1302 DAT    |
-| GPIO26 | RTC RST  | DS1302 RST    |
-| GPIO21 | SPI CS   | SD Card CS    |
-| GPIO18 | SPI SCK  | SD Card SCK   |
-| GPIO19 | SPI MISO | SD Card MISO  |
-| GPIO23 | SPI MOSI | SD Card MOSI  |
-
-### Sensor Specifications
-
-#### AHT30 (Air Temperature & Humidity)
-
-- **Interface**: I2C (0x38 address)
-- **Temperature Range**: -40°C to 85°C
-- **Humidity Range**: 0% to 100% RH
-- **Accuracy**: ±0.3°C, ±2% RH
-
-#### BH1750 (Light Intensity)
-
-- **Interface**: I2C (0x23 address)
-- **Range**: 1 - 65535 lux
-- **Resolution**: 1 lux
-
-#### DS18B20 (Water Temperature)
-
-- **Interface**: OneWire
-- **Range**: -55°C to 125°C
-- **Accuracy**: ±0.5°C
-- **Resolution**: 12-bit (0.0625°C)
-
-#### pH Sensor (Analog)
-
-- **Interface**: ADC (GPIO35)
-- **Range**: 0-14 pH
-- **Voltage**: 0-3.3V
-- **Calibration**: Quadratic formula
-
-#### TDS Sensor (Analog)
-
-- **Interface**: ADC (GPIO34)
-- **Range**: 0-1000 ppm (expandable)
-- **Temperature Compensation**: Automatic
-
-#### DS1302 (Real-Time Clock)
-
-- **Interface**: 3-wire serial
-- **Backup**: CR2032 battery
-- **Accuracy**: ±2 minutes/month
+| Layer | Technology |
+|-------|-----------|
+| Firmware | ESP32 (Arduino framework), WiFi, HTTPClient |
+| Backend | Node.js, Express 5.1, Mongoose 8, JWT (jsonwebtoken), bcryptjs |
+| Database | MongoDB (Atlas or local) |
+| Real-time | WebSocket (ws library) |
+| Frontend | Vue 3 (Composition API), Vite, Pinia, Vue Router 4 |
+| Charts | Chart.js via vue-chartjs |
+| Icons | lucide-vue-next |
+| HTTP client | Axios (with interceptors) |
 
 ---
 
-## Software Architecture
-
-### Main Components
-
-```cpp
-// Core Modules
-1. Sensor Reading Module
-   - readAllSensors()
-   - readPHValue()
-   - readTDSValue()
-   - getMedianFiltered()
-
-2. Data Transmission Module
-   - sendToMongoDB()
-   - formatJSON()
-
-3. Failover Module
-   - writeToSDCard()
-   - syncBackupToMongoDB()
-   - countBackupRecords()
-
-4. Time Management Module
-   - syncTimeWithNTP()
-   - getISOTimestamp()
-   - printCurrentTime()
-
-5. Logging Module
-   - writeToCSVLog()
-   - initializeCSVLog()
-   - getCSVFilename()
-```
-
-### State Management
-
-```cpp
-// System State Variables
-bool mongoDBConnected;    // Current MongoDB connection status
-bool sdCardAvailable;     // SD card initialization status
-bool rtcAvailable;        // RTC initialization status
-int sdBackupCounter;      // Number of records in SD backup
-```
-
----
-
-## Data Flow
-
-### Normal Operation
-
-```
-1. Read Sensors (every 60 seconds)
-   ↓
-2. Format Data (JSON)
-   ↓
-3. Send to MongoDB
-   ↓
-4. Log to CSV (with OK status)
-   ↓
-5. Print Summary
-```
-
-### Failover Operation
-
-```
-1. Read Sensors (every 60 seconds)
-   ↓
-2. Format Data (JSON)
-   ↓
-3. Send to MongoDB → FAILS
-   ↓
-4. Write to SD Card (/backup.jsonl)
-   ↓
-5. Increment sdBackupCounter
-   ↓
-6. Log to CSV (with FAIL status + counter)
-   ↓
-7. Print Summary (with backup count)
-```
-
-### Recovery Operation
-
-```
-1. Read Sensors
-   ↓
-2. Send to MongoDB → SUCCESS
-   ↓
-3. Check SD Card for backup data
-   ↓
-4. Sync backup to MongoDB (batch of 50)
-   ↓
-5. Remove synced records from SD
-   ↓
-6. Reset sdBackupCounter
-   ↓
-7. Continue normal operation
-```
-
----
-
-## Failover Logic
-
-### Trigger Conditions
-
-Failover activates when ANY of these occur:
-
-- WiFi disconnected
-- MongoDB API returns non-200 status
-- HTTP timeout (10 seconds)
-- Network error
-
-### Backup Process
-
-```cpp
-if (!mongoDBConnected) {
-    // Increment counter
-    sdBackupCounter++;
-
-    // Save to SD card
-    writeToSDCard(data);
-
-    // Log to CSV with FAIL status
-    writeToCSVLog(data, false, sdBackupCounter);
-
-    // Alert user
-    Serial.println("[FAILOVER] MongoDB disconnected");
-    Serial.printf("[SD CARD] Total backup records: %d\n", sdBackupCounter);
-}
-```
-
-### Sync Process
-
-```cpp
-if (mongoDBConnected && hasBackupData()) {
-    // Read up to 50 records from SD
-    syncBackupToMongoDB();
-
-    // Update counter
-    sdBackupCounter = countBackupRecords();
-}
-```
-
-### Batch Processing
-
-- **Batch Size**: 50 records maximum per sync cycle
-- **Delay**: 50ms between each HTTP request
-- **Timeout**: 10 seconds per request
-- **Retry**: Failed records kept for next cycle
-
----
-
-## Data Formats
-
-### MongoDB JSON Format
-
-```json
-{
-  "device_id": "GREENPULSE-V1-MKUMW0RG-1JS0A",
-  "data_id": "75a19cdd-4682-4b30-ad68-9e336494ec9b",
-  "timestamp": "2024-04-18T14:30:00.000+07:00",
-  "ph_value": 7.48,
-  "ec_value": 900.4,
-  "tds_value": 450.2,
-  "water_temperature_c": 25.5,
-  "air_temperature_c": 28.3,
-  "air_humidity": 65.2,
-  "light_intensity": 1250.0,
-  "created_at": { "$date": "2024-04-18T14:30:00.000+07:00" },
-  "updated_at": { "$date": "2024-04-18T14:30:00.000+07:00" },
-  "__v": 0
-}
-```
-
-### SD Card Backup Format (JSON Lines)
-
-```json
-{"device_id":"...","data_id":"...","timestamp":"...",...}
-{"device_id":"...","data_id":"...","timestamp":"...",...}
-```
-
-### CSV Log Format
-
-```csv
-timestamp,ph_value,tds_value,ec_value,water_temp_c,air_temp_c,air_humidity,light_lux,mongodb_status,sd_backup_count
-2024-04-18T14:30:00.000+07:00,7.48,450.2,900.4,25.50,28.30,65.20,1250.0,OK,0
-2024-04-18T14:31:00.000+07:00,7.45,448.5,897.0,25.52,28.32,65.15,1248.5,FAIL,1
-2024-04-18T14:32:00.000+07:00,7.46,449.0,898.0,25.51,28.31,65.18,1249.0,FAIL,2
-```
-
----
-
-## Sensor Calibration
-
-### pH Sensor Calibration
-
-**Formula**: `pH = a × V² + b × V + c`
-
-Where:
-
-- `V` = ADC voltage (0-3.3V)
-- `a = -0.0562836215`
-- `b = -5.903839`
-- `c = 13.816135`
-
-**Calibration Procedure**:
-
-1. Prepare pH 4.0, 7.0, and 10.0 buffer solutions
-2. Measure voltage at each pH level
-3. Use quadratic regression to find a, b, c coefficients
-4. Update values in code
-
-### TDS Sensor Calibration
-
-**Formula**:
-
-```
-TDS = (133.42 × Vc³ - 255.86 × Vc² + 857.39 × Vc) × TDS_FACTOR
-
-Where:
-  Vc = V / (1 + 0.02 × (T - 25))
-  V = measured voltage
-  T = water temperature (°C)
-  TDS_FACTOR = 0.5
-```
-
-**Temperature Compensation**:
-
-- Reference temperature: 25°C
-- Compensation rate: 2% per °C
-
----
-
-## Time Management
-
-### NTP Synchronization
-
-**Configuration**:
-
-- Server: `pool.ntp.org` (primary), `time.google.com`, `time.windows.com` (fallback)
-- Sync interval: 24 hours
-- Timezone: GMT+7 (Thailand)
-- Retry attempts: 10 (with 500ms delay)
-
-**Process**:
-
-```
-1. Connect to WiFi
-2. Query NTP servers
-3. Retry up to 10 times if failed
-4. Update RTC with NTP time
-5. If NTP fails, use existing RTC time
-```
-
-### Timestamp Format
-
-**ISO 8601 with timezone offset**:
-
-```
-2024-04-18T14:30:00.000+07:00
-```
-
-**Components**:
-
-- Date: `YYYY-MM-DD`
-- Time: `HH:MM:SS`
-- Milliseconds: `.000`
-- Timezone: `+07:00` (GMT+7)
-
----
-
-## Deployment Guide
+## Local Development Setup
 
 ### Prerequisites
+- Node.js 18+
+- MongoDB (local or Atlas connection string)
 
-1. **Hardware**:
-   - ESP32 DevKit
-   - All sensors listed in hardware section
-   - Breadboard and jumper wires
-   - Micro SD card (minimum 4GB, Class 10)
-   - CR2032 battery for RTC
+### Backend
 
-2. **Software**:
-   - Arduino IDE 1.8.x or 2.x
-   - ESP32 board support package
-   - Required libraries (see README.md)
-
-3. **Services**:
-   - MongoDB database (or backend API)
-   - WiFi network with internet access
-
-### Step-by-Step Deployment
-
-#### 1. Hardware Assembly
-
-```
-ESP32 Pinout:
-                    ┌─────────────┐
-    3.3V ───────────┤VIN       GND├─────────── GND
-    EN  ────────────┤EN        IO23├─────────── SD MOSI
-    GPIO36 ─────────┤VP/IO36   IO22├─────────── (unused)
-    GPIO39 ─────────┤VN/IO39   IO1 ├─────────── TX0
-    GPIO34 (TDS) ───┤IO34      IO3 ├─────────── RX0
-    GPIO35 (pH) ────┤IO35      IO21├─────────── SD CS
-    GPIO32 ─────────┤IO32      IO19├─────────── SD MISO
-    GPIO33 ─────────┤IO33      IO18├─────────── SD SCK
-    GPIO25 ─────────┤IO25       IO5 ├─────────── (unused)
-    GPIO26 (RTC RST)┤IO26       IO17├─────────── I2C SCL
-    GPIO27 (RTC DAT)┤IO27       IO16├─────────── I2C SDA
-    GPIO14 (RTC CLK)┤IO14       IO4 ├─────────── DS18B20
-    GPIO12 ─────────┤IO12       IO0 ├─────────── BOOT
-    GPIO13 ─────────┤IO13      IO2 ├─────────── (unused)
-    GPIO9  ─────────┤SD2       IO15├─────────── (unused)
-    GPIO10 ─────────┤SD3       IO13├─────────── (unused)
-    GPIO11 ─────────┤CMD       IO12├─────────── (unused)
-    GPIO6  ─────────┤SD0       IO14├─────────── (unused)
-    GPIO7  ─────────┤SD1       IO27├─────────── (unused)
-    GPIO8  ─────────┤CLK       IO25├─────────── (unused)
-                    └─────────────┘
+```bash
+cd wolffia_backend
+cp .env.example .env   # fill in MONGODB_URI, JWT_SECRET, JWT_EXPIRE, PORT, CORS_ORIGIN
+npm install
+npm run dev            # nodemon server.js
 ```
 
-#### 2. Software Setup
+Key environment variables:
 
-1. Install Arduino IDE
-2. Add ESP32 board support:
-   - File → Preferences → Additional Board Manager URLs
-   - Add: `https://dl.espressif.com/dl/package_esp32_index.json`
-   - Tools → Board → Board Manager → Search "ESP32" → Install
+| Variable | Example | Purpose |
+|----------|---------|---------|
+| `MONGODB_URI` | `mongodb://localhost:27017/wolffia` | Database connection |
+| `JWT_SECRET` | `change-me-in-prod` | Token signing key |
+| `JWT_EXPIRE` | `24h` | Token lifetime |
+| `PORT` | `3000` | HTTP/WebSocket port |
+| `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 
-3. Install required libraries:
-   - Sketch → Include Library → Manage Libraries
-   - Search and install each library from README.md
-
-4. Configure the code:
-
-   ```cpp
-   // WiFi credentials
-   const char* WIFI_SSID = "your-ssid";
-   const char* WIFI_PASSWORD = "your-password";
-
-   // Backend API
-   const char* BACKEND_API_URL = "https://your-api.com/api/sensor-data";
-
-   // Device ID (unique per device)
-   const char* DEVICE_ID = "GREENPULSE-V1-XXXXXX";
-   ```
-
-5. Select board and port:
-   - Tools → Board → ESP32 Dev Module
-   - Tools → Port → Select your COM port
-
-6. Upload the code:
-   - Sketch → Upload
-   - Wait for "Done uploading"
-
-#### 3. Initial Testing
-
-1. Open Serial Monitor (Tools → Serial Monitor)
-2. Set baud rate to 115200
-3. Press RST button on ESP32
-4. Verify startup messages:
-
-   ```
-   ========================================
-      GREENPULSE - ESSENTIAL MONITOR
-   ========================================
-   [SENSORS] Initializing...
-     [OK] AHT30 - Air Temp & Humidity
-     [OK] BH1750 - Light Sensor
-     [OK] DS18B20 - Water Temperature
-     [OK] Analog sensors (pH, TDS)
-   [RTC] Initializing... OK
-   [SD CARD] Initializing... OK
-   [WiFi] Connecting to: your-ssid .... Connected
-   [NTP] Syncing time with servers... OK
-   [SYSTEM] Setup complete
-   ```
-
-5. Check sensor readings appear every 60 seconds
-
-#### 4. Field Deployment
-
-1. **Power Supply**:
-   - Use 5V/2A USB power adapter
-   - Or 3.7V LiPo battery with charging module
-
-2. **Waterproofing**:
-   - Use waterproof DS18B20 probe
-   - Seal all connections with heat shrink
-   - Place ESP32 in waterproof enclosure
-
-3. **Sensor Placement**:
-   - pH and TDS probes in nutrient solution
-   - DS18B20 submerged in water
-   - AHT30 and BH1750 in air (avoid direct sunlight)
-
-4. **SD Card**:
-   - Format as FAT32
-   - Insert before power-on
-   - Check files created after first run
-
-5. **Monitoring**:
-   - Check Serial Monitor for errors
-   - Verify data in MongoDB
-   - Check SD card files periodically
+### Frontend
+```bash
+cd wolffia_frontend
+cp .env.example .env   # set VITE_API_BASE_URL=http://localhost:3000/api
+npm install
+npm run dev            # Vite dev server on http://localhost:5173
+```
 
 ---
 
-## Troubleshooting
+## Authentication & Authorization
 
-### Common Issues
+### Flow
 
-#### 1. NTP Sync Fails
+1. Client `POST /api/auth/login` with `{ email, password }`
+2. Backend validates credentials, checks `is_active` and `is_deleted`, issues a JWT signed with `JWT_SECRET`
+3. Frontend stores the token in `localStorage` via `useAuthStore` (Pinia)
+4. Every subsequent request includes `Authorization: Bearer <token>` (injected by Axios request interceptor)
+5. Backend `authenticate` middleware verifies the token on every protected route
+6. On 401 response the Axios response interceptor clears localStorage and redirects to `/login`
 
-**Symptom**: `[NTP] Failed to obtain time after retries`
+### Roles
 
-**Solutions**:
+| Role | Access |
+|------|--------|
+| `farmer` | Own devices, own farm, own sensor data and alerts |
+| `admin` | All users, all farms, all devices, system stats, user management |
 
-- Check WiFi internet connection
-- Verify firewall allows UDP port 123
-- Check NTP servers are accessible
-- System will use RTC time as fallback
-
-#### 2. SD Card Not Detected
-
-**Symptom**: `[SD CARD] Initializing... FAILED`
-
-**Solutions**:
-
-- Format SD card as FAT32
-- Check wiring (CS=21, SCK=18, MISO=19, MOSI=23)
-- Try different SD card
-- Check card is inserted properly
-
-#### 3. MongoDB Connection Fails
-
-**Symptom**: `[FAILOVER] MongoDB disconnected`
-
-**Solutions**:
-
-- Check WiFi connection
-- Verify API URL is correct
-- Check backend server is running
-- Check SSL certificate validity
-- Data will be saved to SD card
-
-#### 4. Sensor Readings Invalid
-
-**Symptom**: pH shows 0 or 14, TDS shows negative
-
-**Solutions**:
-
-- Check sensor connections
-- Verify calibration coefficients
-- Check probe is in solution
-- Clean probes if contaminated
-
-#### 5. RTC Time Wrong
-
-**Symptom**: Timestamp shows wrong date/time
-
-**Solutions**:
-
-- Replace CR2032 battery
-- Check RTC wiring (CLK=14, DAT=27, RST=26)
-- Force NTP sync by restarting
-- Check RTC crystal is soldered
-
-### Debug Mode
-
-Enable verbose logging by adding to `setup()`:
-
-```cpp
-Serial.setDebugOutput(true);
+### JWT Payload
+```json
+{ "userId": "<ObjectId>", "email": "...", "role": "farmer|admin" }
 ```
 
-### Serial Commands
+### Route Guards (Vue Router)
+`router/index.js` `beforeEach` guard reads `auth_token` and `user_role` from `localStorage`:
+- `meta.requiresAuth: true` — redirects unauthenticated users to `/login`
+- `meta.requiresAdmin: true` — redirects non-admin users to `/dashboard`
+- Already-authenticated users visiting `/login` or `/register` are redirected to `/dashboard`
 
-While not implemented by default, you can add these for debugging:
+---
 
-```cpp
-// In loop(), check for serial commands
-if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    if (cmd == "status") printSystemStatus();
-    if (cmd == "sensors") forceSensorRead();
-    if (cmd == "sync") syncTimeWithNTP();
-    if (cmd == "format") formatSDCard();
+## Backend API Reference
+
+Base URL: `http://localhost:3000/api`
+
+All routes except `/auth/register` and `/auth/login` require `Authorization: Bearer <token>`.
+
+### Auth — `/api/auth`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/register` | No | Register new user (auto-creates farm for farmer role) |
+| POST | `/login` | No | Login, returns JWT + user object |
+| GET | `/me` | Yes | Get current authenticated user |
+| POST | `/logout` | Yes | Server-side logout acknowledgement |
+
+### Devices — `/api/devices`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | List devices (farmers see only their own) |
+| GET | `/:deviceId` | Get device by ID |
+| POST | `/` | Create device |
+| PUT | `/:deviceId` | Update device |
+| DELETE | `/:deviceId` | Soft-delete device (`?hard=true` for permanent) |
+| PATCH | `/:deviceId/status` | Update device status |
+| PUT | `/:deviceId/configuration` | Update device configuration |
+| PUT | `/:deviceId/relays/:relayId` | Update relay name or status |
+| POST | `/:deviceId/schedules` | Add schedule |
+| PUT | `/:deviceId/schedules/:scheduleId` | Update schedule |
+| DELETE | `/:deviceId/schedules/:scheduleId` | Delete schedule |
+
+### Sensor Data — `/api/sensor-data`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/` | Submit a sensor reading (used by ESP32) |
+| GET | `/latest` | Latest reading from all devices |
+| GET | `/:deviceId/latest` | Latest reading for one device |
+| GET | `/:deviceId/history` | Paginated history (`range`, `startDate`, `endDate`, `page`, `limit`) |
+| GET | `/:deviceId/range` | Readings between `startDate` and `endDate` |
+| GET | `/:deviceId/aggregate` | Aggregated data (`aggregation=hourly`) |
+
+### Alerts — `/api/alerts`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | List alerts (paginated, filterable) |
+| GET | `/unresolved` | All unresolved alerts |
+| GET | `/device/:deviceId` | Alerts for a specific device |
+| GET | `/:alertId` | Get single alert |
+| POST | `/` | Create alert |
+| PUT | `/:alertId` | Update alert |
+| PATCH | `/:alertId/resolve` | Mark alert as resolved |
+| DELETE | `/:alertId` | Delete alert |
+
+### Farms — `/api/farms`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | List farms |
+| GET | `/:farmId` | Get farm |
+| POST | `/` | Create farm |
+| PUT | `/:farmId` | Update farm |
+| DELETE | `/:farmId` | Soft-delete farm (`?hard=true` for permanent) |
+| GET | `/:farmId/devices` | Devices belonging to farm |
+| GET | `/:farmId/statistics` | Farm statistics |
+
+### Analytics — `/api/analytics`
+
+| Method | Path | Admin | Description |
+|--------|------|-------|-------------|
+| GET | `/dashboard` | No | Dashboard summary (`farmId` param optional) |
+| GET | `/devices/:deviceId/performance` | No | Device performance (`timeRange` param) |
+| GET | `/farms/:farmId/health` | No | Farm health score |
+| GET | `/export` | No | Export data as file (blob) |
+| GET | `/min-max/:deviceId` | No | Min/max sensor values |
+| GET | `/admin/stats` | Yes | System-wide statistics |
+
+### Users — `/api/users` (Admin only)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | List all users |
+| GET | `/:userId` | Get user |
+| POST | `/` | Create user |
+| PUT | `/:userId` | Update user |
+| DELETE | `/:userId` | Soft-delete user (`?hard=true` for permanent) |
+| PATCH | `/:userId/toggle-status` | Toggle `is_active` |
+
+### System Logs — `/api/system-logs`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Paginated audit log entries |
+
+---
+
+## Data Models
+
+### User
+```
+user_name, email, password (bcrypt), role (admin|farmer),
+phone, is_active, is_deleted, last_login, created_at, updated_at
+```
+
+### Farm
+```
+farm_name, user_id → User, location, is_deleted, created_at, updated_at
+```
+
+### Device
+```
+device_id (unique, uppercase), user_id → User, farm_id → Farm,
+config_id → DeviceConfiguration, device_name, location,
+status (active|inactive|maintenance), last_activity, is_deleted
+```
+
+### SensorData
+```
+device_id, data_id (unique), timestamp,
+ph_value, ec_value (µS/cm raw), tds_value,
+water_temperature_c, air_temperature_c, air_humidity, light_intensity
+
+Virtuals: ph, ec, tds, temperature_water_c, temperature_air_c
+  → each returns { value, status: "normal" }
+Note: ec_value > 20 is divided by 1000 at the API layer (µS/cm → mS/cm)
+```
+
+### Alert
+```
+alert_id (UUID), device_id, data_id → SensorData, user_id → User,
+alert_type, parameter, threshold_value, actual_value, message,
+severity (caution), status (active|acknowledged|resolved), resolved_at
+
+Virtuals: id, type, resolved, resolvedAt, device, time
+```
+
+### DeviceConfiguration
+```
+Stores relay definitions, schedules, and sensor thresholds per device.
+Referenced by Device.config_id.
+```
+
+### SystemLog
+```
+Audit trail written by auditLog() utility.
+Fields: user_id, target_type, target_id, action_type, event, message, created_at
+```
+
+---
+
+## Frontend Structure
+
+```
+wolffia_frontend/src/
+├── main.js                   # App entry: Pinia → auth init → router → mount
+├── App.vue                   # Root component
+├── router/index.js           # Vue Router 4 with beforeEach auth guard
+├── stores/module/
+│   ├── auth.js               # Auth state: token, userName, userRole, login(), logout()
+│   ├── devices.js            # Device CRUD + relay/schedule actions
+│   ├── farms.js              # Farm CRUD
+│   ├── alerts.js             # Alert list, resolve, polling
+│   └── sensorData.js         # Readings, history, normalizeReading()
+├── services/
+│   ├── api.js                # Axios instance + all API methods
+│   └── websocket.js          # WebSocket singleton (ws client)
+├── composables/
+│   └── useWebSocket.js       # Lifecycle wrapper: setup() / cleanup()
+├── views/
+│   ├── DashboardView.vue     # Main dashboard (farmer + admin layouts)
+│   ├── DevicesView.vue
+│   ├── DeviceDetailsView.vue
+│   ├── AlertsView.vue
+│   ├── AnalyticsView.vue
+│   ├── FarmsView.vue / FarmDetailsView.vue
+│   ├── SettingsView.vue
+│   ├── ProfileView.vue
+│   ├── SystemActivityView.vue
+│   ├── UsersManagementView.vue  (admin only)
+│   └── Auth/LoginView.vue / RegisterView.vue
+├── components/
+│   ├── Dashboard/MetricCard.vue
+│   ├── Dashboard/ChartCard.vue  (Chart.js, time-range downsampling)
+│   ├── Alerts/AlertItem.vue
+│   └── Common/EmptyState.vue
+└── utils/
+    ├── thresholds.js
+    └── sensorHelpers.js
+```
+
+### Pinia Stores
+
+| Store | Key state | Key actions |
+|-------|-----------|-------------|
+| `auth` | `token`, `userName`, `userRole`, `isAuthenticated`, `isAdmin` | `login()`, `logout()`, `initFromStorage()` |
+| `devices` | `devices`, `currentDevice` | `fetchDevices()`, `createDevice()`, `updateDevice()`, `deleteDevice()`, `toggleRelay()` |
+| `farms` | `farms`, `currentFarm` | `fetchFarms()`, `createFarm()`, `updateFarm()` |
+| `alerts` | `alerts`, `unresolvedCount` | `fetchAlerts()`, `resolveAlert()` |
+| `sensorData` | `latestReadings`, `historicalData` | `fetchLatestReadings()`, `fetchHistoricalData()`, `normalizeReading()` |
+
+---
+
+## WebSocket Events
+
+The server broadcasts events over WebSocket on the same port as HTTP. The frontend connects via `websocketService` singleton, wrapped by `useWebSocket` composable.
+
+### Server → Client
+
+| Event type | Payload | Trigger |
+|-----------|---------|---------|
+| `sensorReading` | Normalized SensorData object | New reading POSTed by ESP32 |
+| `alert` | Alert object | Alert created |
+| `deviceStatus` | `{ deviceId, status }` | Device status changed |
+| `connected` | `{ message }` | WebSocket handshake complete |
+
+### Client → Server
+
+| Message type | Payload | Purpose |
+|-------------|---------|---------|
+| `subscribe` | `{ deviceId }` | Subscribe to readings for a specific device |
+| `ping` | — | Keep-alive |
+
+### Usage in a view
+```js
+const ws = useWebSocket();
+await ws.setup({ autoConnect: true, subscribeToDevices: true });
+// on unmount:
+ws.cleanup();
+```
+
+---
+
+## EC Value Unit Handling
+
+Raw EC from ESP32 is in **µS/cm** (e.g., 1500). The display target is **mS/cm** (e.g., 1.5).
+
+Conversion happens at **one place only** — the backend `sensorData` route `attachVirtualMetrics()`:
+```js
+if (alias === 'ec' && val > 20) val = val / 1000;
+```
+
+The frontend `normalizeReading()` in `sensorData.js` store applies the same heuristic as a safety net for readings that arrive via WebSocket. Do **not** divide `ec_value` again in components or computed properties.
+
+---
+
+## ESP32 Firmware Notes
+
+The firmware runs on the ESP32 using the Arduino framework:
+
+- Reads sensors over I2C / ADC at a configurable interval
+- Connects to WiFi using credentials stored in flash
+- POSTs JSON sensor readings to `POST /api/sensor-data`
+
+Payload fields:
+```json
+{
+  "device_id": "DEVICE-001",
+  "data_id": "<uuid>",
+  "ph_value": 6.8,
+  "ec_value": 1500,
+  "tds_value": 750,
+  "water_temperature_c": 24.5,
+  "air_temperature_c": 28.0,
+  "air_humidity": 65.0,
+  "light_intensity": 12000,
+  "timestamp": "2026-04-21T10:00:00.000Z"
 }
 ```
 
----
-
-## Performance Specifications
-
-| Metric                | Value                |
-| --------------------- | -------------------- |
-| Sensor Read Interval  | 60 seconds           |
-| NTP Sync Interval     | 24 hours             |
-| SD Card Batch Size    | 50 records           |
-| HTTP Timeout          | 10 seconds           |
-| ADC Resolution        | 12-bit (4096 levels) |
-| Median Filter Samples | 10                   |
-| CSV File Rotation     | Monthly              |
-| Max CSV File Size     | Limited by SD card   |
+- On HTTP 401 the device retries after a backoff period
+- OTA firmware updates are not yet implemented
 
 ---
 
-## Security Considerations
+## 5. Implementation
 
-1. **WiFi Credentials**: Store in code (not in repository)
-2. **API Keys**: Use environment variables or secure storage
-3. **SSL/TLS**: Verify certificates for HTTPS connections
-4. **Device ID**: Use unique identifier per device
-5. **SD Card**: Encrypt sensitive data if required
+### 5.1 Hardware Implementation
 
----
+The physical system is built around the ESP32 microcontroller as the central sensing and communication unit. The following hardware components are used:
 
-## Maintenance
+| Component | Model / Spec | Interface | Purpose |
+|-----------|-------------|-----------|---------|
+| Microcontroller | ESP32 (38-pin DevKit) | — | WiFi connectivity, sensor orchestration |
+| pH Sensor | Analog pH probe + signal board | ADC | Measure water pH (0–14) |
+| EC / TDS Sensor | TDS-10 or similar | ADC | Measure electrical conductivity and total dissolved solids |
+| Water Temperature | DS18B20 waterproof probe | 1-Wire | Measure nutrient solution temperature |
+| Air Temperature & Humidity | DHT22 / SHT31 | Digital GPIO | Measure ambient conditions |
+| Light Intensity | BH1750 or LDR circuit | I2C / ADC | Measure lux or raw light level |
+| Relay Module | 4/8-channel 5 V relay board | GPIO | Control pumps, grow lights, fans |
+| Power Supply | 5 V DC adapter | — | Power ESP32 and relay board |
+| Enclosure | Waterproof junction box | — | Protect electronics from humidity |
 
-### Monthly
-
-- Check SD card free space
-- Download and archive CSV files
-- Clean sensor probes
-- Verify calibration
-
-### Quarterly
-
-- Replace RTC battery if needed
-- Check wiring connections
-- Update firmware if available
-- Review MongoDB data retention
-
-### Annually
-
-- Full sensor recalibration
-- Hardware inspection
-- Backup configuration
-- Document any changes
+**Wiring overview:**
+- pH and EC/TDS signal boards output 0–3.3 V analog; connected to ESP32 ADC pins
+- DS18B20 uses a single data line with 4.7 kΩ pull-up resistor to 3.3 V
+- DHT22 / SHT31 connected to a GPIO pin with 10 kΩ pull-up
+- BH1750 connected via I2C (SDA/SCL); address 0x23 (ADDR pin low)
+- Relay control pins connected to ESP32 GPIO; relay common terminals wired to load circuits
 
 ---
 
-## Version History
+### 5.2 Embedded Software Implementation
 
-| Version | Date       | Changes                             |
-| ------- | ---------- | ----------------------------------- |
-| 1.0     | 2024-04-18 | Initial release with failover logic |
+The firmware is written with the Arduino framework targeting the ESP32.
+
+**Libraries used:**
+
+| Library | Purpose |
+|---------|---------|
+| `WiFi.h` | WiFi station connection |
+| `HTTPClient.h` | POST sensor readings to backend REST API |
+| `ArduinoJson` | Serialize JSON payload |
+| `OneWire` + `DallasTemperature` | DS18B20 water temperature |
+| `DHT` or `Wire` + `BH1750` | Air temperature/humidity and light |
+
+**Main loop flow:**
+
+```
+setup()
+  ├── Connect to WiFi (retry with backoff)
+  └── Initialize sensors
+
+loop()
+  ├── Read all sensors
+  ├── Build JSON payload
+  ├── POST to /api/sensor-data
+  │     ├── 200 OK  → log success, sleep interval
+  │     ├── 401     → clear stored token, retry after backoff
+  │     └── other   → log error, sleep interval
+  └── Check relay schedule (compare RTC / NTP time to configured schedules)
+```
+
+**Key configuration constants (defined in `config.h` or top of main sketch):**
+
+```cpp
+const char* WIFI_SSID     = "your-ssid";
+const char* WIFI_PASSWORD = "your-password";
+const char* API_BASE_URL  = "http://<server-ip>:3000/api";
+const char* DEVICE_ID     = "DEVICE-001";
+const int   SEND_INTERVAL = 30000; // ms between readings
+```
+
+EC / pH ADC calibration is applied in firmware before transmission (see §5.4).
 
 ---
 
-## Support
+### 5.3 Frontend / Backend Implementation
 
-For issues or questions:
+#### Backend (Express + MongoDB)
 
-1. Check this documentation
-2. Review Serial Monitor logs
-3. Verify hardware connections
-4. Test with minimal configuration
-5. Contact project maintainer
+The backend is a Node.js REST API with a co-located WebSocket server.
+
+**Startup sequence (`server.js`):**
+1. Load `.env` via `dotenv`
+2. Apply Express middleware: CORS, JSON body parser, Helmet (security headers), rate limiter
+3. Register route modules under `/api/*`
+4. Connect to MongoDB via Mongoose
+5. Start HTTP server; attach `WebSocketServer` to the same port
+6. WebSocket server authenticates clients via JWT query parameter on upgrade
+
+**Sensor ingestion pipeline (`POST /api/sensor-data`):**
+1. Validate `device_id` and required fields
+2. Persist `SensorData` document to MongoDB
+3. Run threshold checks against `DeviceConfiguration`; create `Alert` if any metric is out of range
+4. Broadcast `sensorReading` event to all WebSocket clients subscribed to that device
+5. Update `Device.last_activity`
+
+**Authentication middleware (`middleware/auth.js`):**
+- Extracts Bearer token from `Authorization` header
+- Verifies JWT signature; rejects expired tokens
+- Loads user from DB; rejects if `!is_active || is_deleted`
+- Attaches `req.user` for downstream route handlers
+
+#### Frontend (Vue 3 + Pinia)
+
+**App bootstrap order (`main.js`):**
+1. `createApp(App)` + `createPinia()` + `app.use(pinia)`
+2. `useAuthStore().initFromStorage()` — restores JWT and role from `localStorage` before the router guard runs
+3. `app.use(router)` — guard can now read authenticated state
+4. `app.mount('#app')`
+
+**Data flow for the Dashboard:**
+1. `onMounted` fetches devices, latest sensor readings, and alerts in parallel via Pinia store actions
+2. `useWebSocket().setup()` connects WebSocket and subscribes to all user devices
+3. Incoming `sensorReading` events update the `sensorData` store → computed chart data re-renders automatically
+4. `ChartCard.vue` receives an array of `{ x: timestamp, y: value }` points; performs client-side downsampling when the selected time range contains more points than pixels
+
+**State management pattern:**
+- All server state lives in Pinia stores; views only read from stores and call actions
+- Auth state (`token`, `isAdmin`) is the single source of truth in `useAuthStore`; no component reads `localStorage` directly
+
+---
+
+### 5.4 Sensor Calibration
+
+> **Note:** Fill in actual calibration values and procedures after hardware testing.
+
+#### pH Sensor Calibration
+
+| Field | Value |
+|-------|-------|
+| Calibration method | |
+| Buffer solutions used | |
+| pH 4.0 buffer — raw ADC voltage | |
+| pH 7.0 buffer — raw ADC voltage | |
+| pH 10.0 buffer — raw ADC voltage (optional) | |
+| Calibration date | |
+| Re-calibration interval | |
+| Slope (mV/pH) | |
+| Offset (mV at pH 7) | |
+| Notes | |
+
+#### EC / TDS Sensor Calibration
+
+| Field | Value |
+|-------|-------|
+| Calibration method | |
+| Reference solution concentration | |
+| Reference solution — raw ADC voltage | |
+| Cell constant (K) | |
+| Calibration date | |
+| Re-calibration interval | |
+| Temperature compensation applied | |
+| Notes | |
+
+#### Water Temperature (DS18B20)
+
+| Field | Value |
+|-------|-------|
+| Factory accuracy | ±0.5 °C |
+| Verified against reference thermometer | |
+| Offset correction applied (°C) | |
+| Calibration date | |
+
+#### Air Temperature & Humidity (DHT22 / SHT31)
+
+| Field | Value |
+|-------|-------|
+| Factory accuracy (temperature) | ±0.5 °C |
+| Factory accuracy (humidity) | ±2–5 % RH |
+| Offset correction — temperature (°C) | |
+| Offset correction — humidity (% RH) | |
+| Calibration date | |
+
+#### Light Intensity (BH1750 / LDR)
+
+| Field | Value |
+|-------|-------|
+| Sensor type | |
+| Unit reported | lux / raw ADC |
+| Calibration reference | |
+| Scaling factor applied | |
+| Calibration date | |
