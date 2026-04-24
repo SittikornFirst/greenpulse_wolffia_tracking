@@ -9,6 +9,85 @@ import { auditLog } from "../utils/logger.js";
 
 const router = express.Router();
 
+// Public endpoint — no JWT required — used by ESP32 to sync relay states from the backend.
+// The device_id acts as the lookup key (same pattern as POST /api/sensor-data).
+router.get("/:deviceId/relay-states", async (req, res) => {
+  try {
+    const device = await Device.findOne({
+      device_id: req.params.deviceId.toUpperCase(),
+      is_deleted: { $ne: true },
+    });
+    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const config = await DeviceConfiguration.findById(device.config_id);
+    if (!config) return res.status(404).json({ success: false, message: "No configuration" });
+
+    res.json({
+      success: true,
+      relays: config.relays.map((r) => ({
+        relay_id: r.relay_id,
+        pin: r.pin,
+        name: r.name,
+        status: r.status,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Public endpoint — no JWT required — used by ESP32 to fetch full device configuration on startup.
+// Returns thresholds, sampling interval, relay states, and schedules in one call.
+router.get("/:deviceId/config", async (req, res) => {
+  try {
+    const device = await Device.findOne({
+      device_id: req.params.deviceId.toUpperCase(),
+      is_deleted: { $ne: true },
+    });
+    if (!device) return res.status(404).json({ success: false, message: "Device not found" });
+
+    const config = await DeviceConfiguration.findById(device.config_id);
+    if (!config) return res.status(404).json({ success: false, message: "No configuration" });
+
+    res.json({
+      success: true,
+      device_id: device.device_id,
+      sampling_interval: config.sampling_interval ?? 30,
+      alert_enabled: config.alert_enabled ?? true,
+      ph_min: config.ph_min ?? 6.0,
+      ph_max: config.ph_max ?? 7.5,
+      ec_value_min: config.ec_value_min ?? 1.0,
+      ec_value_max: config.ec_value_max ?? 2.5,
+      water_temp_min: config.water_temp_min ?? 20.0,
+      water_temp_max: config.water_temp_max ?? 28.0,
+      air_temp_min: config.air_temp_min ?? 18.0,
+      air_temp_max: config.air_temp_max ?? 35.0,
+      light_intensity_min: config.light_intensity_min ?? 3500.0,
+      light_intensity_max: config.light_intensity_max ?? 6000.0,
+      relays: config.relays.map((r) => ({
+        relay_id: r.relay_id,
+        pin: r.pin,
+        name: r.name,
+        status: r.status,
+      })),
+      schedules: config.schedules
+        .filter((s) => s.enabled)
+        .map((s) => ({
+          schedule_id: s.schedule_id,
+          relays: s.relays,
+          days: s.days,
+          startHour: s.startHour,
+          startMinute: s.startMinute,
+          stopHour: s.stopHour,
+          stopMinute: s.stopMinute,
+          enabled: s.enabled,
+        })),
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 router.use(authenticate);
 
 // Get all devices

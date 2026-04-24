@@ -166,10 +166,20 @@
             </div>
 
             <div class="form-group" v-if="isAdmin">
+              <label for="device-user">Assign to User</label>
+              <select id="device-user" v-model="newDevice.userId" class="form-control" @change="newDevice.farmId = ''">
+                <option value="">— Self (admin) —</option>
+                <option v-for="u in users" :key="u._id" :value="u._id">
+                  {{ u.name || u.username || u.email }}
+                </option>
+              </select>
+            </div>
+
+            <div class="form-group" v-if="isAdmin">
               <label for="device-farm">Assign to Farm</label>
-              <select id="device-farm" v-model="newDevice.farmId" required class="form-control">
-                <option value="" disabled>Select a farm...</option>
-                <option v-for="farm in farms" :key="farm._id || farm.id" :value="farm._id || farm.id">
+              <select id="device-farm" v-model="newDevice.farmId" class="form-control">
+                <option value="">— Auto-detect user's farm —</option>
+                <option v-for="farm in farmsForModal" :key="farm._id || farm.id" :value="farm._id || farm.id">
                   {{ farm.farm_name || farm.name }}
                 </option>
               </select>
@@ -351,12 +361,21 @@ export default {
       name: "",
       farmId: "",
       location: "",
+      userId: "",
     });
 
     const user = ref(null);
+    const users = ref([]);
     const isAdmin = computed(() => user.value?.role === "admin");
 
     const farms = computed(() => farmsStore.farms);
+
+    const farmsForModal = computed(() => {
+      if (!newDevice.value.userId) return farms.value;
+      return farms.value.filter(
+        (f) => String(f.user_id) === String(newDevice.value.userId),
+      );
+    });
 
     const activeDevicesCount = computed(
       () => devicesStore.devices.filter((d) => d.status === "active").length,
@@ -418,6 +437,7 @@ export default {
         name: "",
         farmId: route.query.farmId || "",
         location: "",
+        userId: "",
       };
       if (route.query.openAdd === "true") {
         const { openAdd, ...remainingQuery } = route.query;
@@ -431,7 +451,8 @@ export default {
         const response = await apiService.createDevice({
           name: newDevice.value.name,
           location: newDevice.value.location,
-          farm_id: newDevice.value.farmId,
+          farm_id: newDevice.value.farmId || undefined,
+          user_id: newDevice.value.userId || undefined,
         });
         
         // Refresh store
@@ -520,8 +541,14 @@ export default {
         await Promise.all([
           devicesStore.fetchDevices(params),
           farmsStore.fetchFarms({ page: 1, limit: 100 }),
-          apiService.getCurrentUser().then((response) => {
+          apiService.getCurrentUser().then(async (response) => {
             user.value = response.data.user;
+            if (response.data.user?.role === "admin") {
+              const usersRes = await apiService.getUsers({ limit: 200 });
+              users.value = (usersRes.data?.users || usersRes.data?.data || []).filter(
+                (u) => u.role !== "admin",
+              );
+            }
           }),
         ]);
       } catch (error) {
@@ -565,6 +592,8 @@ export default {
       showAddModal,
       adding,
       farms,
+      farmsForModal,
+      users,
       newDevice,
       isAdmin,
       activeDevicesCount,

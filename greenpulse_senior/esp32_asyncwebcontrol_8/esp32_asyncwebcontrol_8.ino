@@ -23,7 +23,9 @@
 // ========== BACKEND API CONFIGURATION ==========
 // Configure this to point to your deployed Node.js backend.
 // E.g. "https://greenpulse-backend.onrender.com/api/sensor-data"
-constexpr char BACKEND_API_URL[] = "https://greenpulse-wolffia-tracking.onrender.com/api/sensor-data";
+constexpr char BACKEND_API_URL[]        = "https://greenpulse-wolffia-tracking.onrender.com/api/sensor-data";
+constexpr char BACKEND_RELAY_URL_BASE[] = "https://greenpulse-wolffia-tracking.onrender.com/api/devices/";
+constexpr char BACKEND_CONFIG_URL_BASE[] = "https://greenpulse-wolffia-tracking.onrender.com/api/devices/";
 
 // ========== WIFI CONFIGURATION ==========
 constexpr char WIFI_SSID[] = "ibo";
@@ -48,15 +50,23 @@ constexpr int RTC_DAT_PIN = 27;
 constexpr int RTC_RST_PIN = 26;
 constexpr int SD_CS = 21;
 
+// Relay Pin Definitions
+// Most relay modules are active-LOW: drive LOW to energise, HIGH to de-energise.
+constexpr int RELAY_AIR_PUMP_PIN = 25;
+constexpr int RELAY_LIGHT_PIN    = 32;
+constexpr int RELAY_ON  = LOW;
+constexpr int RELAY_OFF = HIGH;
+
 // Sensor Configuration
 constexpr int MAX_PH_TDS_SCHEDULES = 10;
 constexpr int SENSOR_SAMPLE_COUNT = 40;
 constexpr int ADC_RESOLUTION = 4095;
 constexpr float ADC_REFERENCE_VOLTAGE = 3.3f;
 constexpr float TDS_REFERENCE_TEMP_C = 25.0f;
-constexpr unsigned long LOG_INTERVAL_MS = 30000;
-constexpr unsigned long SENSOR_READ_INTERVAL_MS = 10000;
-constexpr unsigned long SCHEDULE_CHECK_INTERVAL_MS = 60000;
+constexpr unsigned long LOG_INTERVAL_MS             = 30000;
+constexpr unsigned long SENSOR_READ_INTERVAL_MS     = 10000;
+constexpr unsigned long SCHEDULE_CHECK_INTERVAL_MS  = 60000;
+constexpr unsigned long RELAY_POLL_INTERVAL_MS       = 30000;  // sync relay states every 30 s
 
 // SD Card Files (daily rotation)
 constexpr char FAILED_LOG_PREFIX[] = "/failed";
@@ -160,6 +170,37 @@ constexpr char AP_PASSWORD[] = "12345678";
 // Data send counter
 unsigned long totalSentToMongo = 0;
 unsigned long totalFailed = 0;
+
+// Relay state (persists in RAM; power-cycle resets to OFF)
+bool relayAirPumpOn = false;
+bool relayLightOn   = false;
+
+// ========== DEVICE CONFIGURATION (fetched from backend on startup) ==========
+float cfg_ph_min           = 6.0f;
+float cfg_ph_max           = 7.5f;
+float cfg_ec_min           = 1.0f;
+float cfg_ec_max           = 2.5f;
+float cfg_wtemp_min        = 20.0f;
+float cfg_wtemp_max        = 28.0f;
+float cfg_atemp_min        = 18.0f;
+float cfg_atemp_max        = 35.0f;
+float cfg_light_min        = 3500.0f;
+float cfg_light_max        = 6000.0f;
+unsigned long cfg_sampling_interval_ms = 30000UL;
+
+// Relay schedules fetched from backend (time-based on/off)
+struct RelaySchedule {
+  bool    enabled;
+  uint8_t relayMask;      // bit 0 = relay 0 (air pump), bit 1 = relay 1 (light)
+  uint8_t days;           // bitmask: bit 0 = Sunday, bit 1 = Monday … bit 6 = Saturday
+  uint8_t startHour;
+  uint8_t startMinute;
+  uint8_t stopHour;
+  uint8_t stopMinute;
+};
+constexpr int MAX_RELAY_SCHEDULES = 10;
+RelaySchedule relaySchedules[MAX_RELAY_SCHEDULES];
+int           relayScheduleCount = 0;
 
 // ========== HTTP/MONGODB LOG FUNCTION ==========
 void addToHTTPLog(const char* endpoint, int statusCode, const char* details) {
@@ -472,6 +513,25 @@ const char index_html[] PROGMEM = R"rawliteral(
       <div class="card"><h3>Light Intensity</h3><div class="value" id="lightLux">--</div><div class="small">BH1750 lux</div></div>
       <div class="card"><h3>pH</h3><div class="value" id="phValue">--</div><div class="small" id="phMeta">ADC -- / -- V</div></div>
       <div class="card"><h3>TDS / EC</h3><div class="value" id="tdsValue">--</div><div class="small" id="tdsMeta">EC --</div></div>
+    </section>
+
+    <!-- Relay Control Panel -->
+    <section class="panel" style="margin-bottom:18px;">
+      <h2 class="section-title">Relay Control</h2>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:0;">
+        <div class="card" id="airPumpCard">
+          <h3>Air Pump</h3>
+          <div class="value" id="airPumpState">--</div>
+          <div class="small">GPIO 25</div>
+          <button id="airPumpBtn" onclick="toggleRelay('airPump')" style="margin-top:12px;width:100%;">Toggle</button>
+        </div>
+        <div class="card" id="lightCard">
+          <h3>Grow Light</h3>
+          <div class="value" id="lightState">--</div>
+          <div class="small">GPIO 32</div>
+          <button id="lightBtn" onclick="toggleRelay('light')" style="margin-top:12px;width:100%;">Toggle</button>
+        </div>
+      </div>
     </section>
 
     <section class="panel" style="margin-bottom:18px;">
@@ -872,17 +932,82 @@ const char index_html[] PROGMEM = R"rawliteral(
       return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
+    // ===== RELAY CONTROL =====
+    function updateRelayUI(relay, state) {
+      const isOn = state === 'on';
+      if (relay === 'airPump') {
+        document.getElementById('airPumpState').textContent = isOn ? 'ON' : 'OFF';
+        document.getElementById('airPumpCard').style.background = isOn
+          ? 'linear-gradient(135deg,#059669 0%,#10b981 100%)'
+          : 'linear-gradient(135deg,#374151 0%,#6b7280 100%)';
+      } else {
+        document.getElementById('lightState').textContent = isOn ? 'ON' : 'OFF';
+        document.getElementById('lightCard').style.background = isOn
+          ? 'linear-gradient(135deg,#d97706 0%,#fbbf24 100%)'
+          : 'linear-gradient(135deg,#374151 0%,#6b7280 100%)';
+      }
+    }
+
+    async function toggleRelay(relay) {
+      try {
+        const response = await fetch(`/relay/${relay}`, { method: 'POST' });
+        const data = await response.json();
+        updateRelayUI(relay, data.state);
+        log(`Relay ${relay}: ${data.state.toUpperCase()}`);
+      } catch (error) {
+        log(`Failed to toggle relay ${relay}`);
+      }
+    }
+
+    async function fetchRelayStatus() {
+      try {
+        const response = await fetch('/relay/status');
+        const data = await response.json();
+        updateRelayUI('airPump', data.airPump);
+        updateRelayUI('light', data.light);
+      } catch (error) { /* ignore */ }
+    }
+
+    // ===== HTTP LOG =====
+    async function fetchHTTPLog() {
+      try {
+        const response = await fetch('/httpLog');
+        if (!response.ok) return;
+        const data = await response.json();
+        const logEl = document.getElementById('httpLog');
+        logEl.innerHTML = '';
+        (data.entries || []).forEach(entry => {
+          const div = document.createElement('div');
+          div.className = 'entry ' + (entry.includes('FAIL') ? 'failed' : 'success');
+          div.textContent = entry;
+          logEl.appendChild(div);
+        });
+      } catch (error) { /* ignore */ }
+    }
+
+    async function clearHTTPLog() {
+      await fetch('/clearHTTPLog', { method: 'POST' });
+      document.getElementById('httpLog').innerHTML = '<div>Log cleared</div>';
+    }
+
+    async function syncNow() {
+      await fetch('/syncNow', { method: 'POST' });
+      log('Manual sync triggered');
+    }
+
     // Initial load
     buildSelectors();
     fetchSystem();
     fetchSensorData();
     loadPHTDSSchedules();
     refreshFileList();
-    
+    fetchRelayStatus();
+
     // Refresh intervals
     setInterval(fetchSystem, 3000);
     setInterval(fetchSensorData, 5000);
     setInterval(loadPHTDSSchedules, 10000);
+    setInterval(fetchRelayStatus, 5000);
   </script>
 </body>
 </html>
@@ -1354,8 +1479,30 @@ void retryFailedPayloads() {
 }
 
 void sensorTask(void *pvParameters) {
+  unsigned long lastRelayPoll    = 0;
+  unsigned long lastScheduleCheck = 0;
+
+  // On startup: fetch full config (thresholds + relay states + schedules) from backend
+  fetchDeviceConfig();
+  lastRelayPoll    = millis();
+  lastScheduleCheck = millis();
+
   while (1) {
     readSensors();
+
+    unsigned long nowMs = millis();
+
+    // Poll relay states every 30 s to pick up live UI toggles between reboots
+    if (nowMs - lastRelayPoll >= RELAY_POLL_INTERVAL_MS) {
+      fetchAndApplyRelayStates();
+      lastRelayPoll = nowMs;
+    }
+
+    // Check time-based relay schedules every 60 s
+    if (nowMs - lastScheduleCheck >= SCHEDULE_CHECK_INTERVAL_MS) {
+      checkRelaySchedules();
+      lastScheduleCheck = nowMs;
+    }
     
     RtcDateTime now = sensorData.rtcTime;
     String timestamp = getISO8601Timestamp(now);
@@ -1849,6 +1996,47 @@ void setupWebServer() {
     }
   });
   
+  // ===== RELAY CONTROL ENDPOINTS =====
+  // POST /relay/airPump?state=on|off  — or omit ?state to toggle
+  server.on("/relay/airPump", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("state")) {
+      relayAirPumpOn = (request->getParam("state")->value() == "on");
+    } else {
+      relayAirPumpOn = !relayAirPumpOn;
+    }
+    setRelay(RELAY_AIR_PUMP_PIN, relayAirPumpOn);
+    Serial.printf("[Relay] Air pump %s\n", relayAirPumpOn ? "ON" : "OFF");
+    String json = "{\"relay\":\"airPump\",\"state\":\"";
+    json += relayAirPumpOn ? "on" : "off";
+    json += "\"}";
+    request->send(200, "application/json", json);
+  });
+
+  // POST /relay/light?state=on|off  — or omit ?state to toggle
+  server.on("/relay/light", HTTP_POST, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("state")) {
+      relayLightOn = (request->getParam("state")->value() == "on");
+    } else {
+      relayLightOn = !relayLightOn;
+    }
+    setRelay(RELAY_LIGHT_PIN, relayLightOn);
+    Serial.printf("[Relay] Light %s\n", relayLightOn ? "ON" : "OFF");
+    String json = "{\"relay\":\"light\",\"state\":\"";
+    json += relayLightOn ? "on" : "off";
+    json += "\"}";
+    request->send(200, "application/json", json);
+  });
+
+  // GET /relay/status
+  server.on("/relay/status", HTTP_GET, [](AsyncWebServerRequest *request) {
+    String json = "{\"airPump\":\"";
+    json += relayAirPumpOn ? "on" : "off";
+    json += "\",\"light\":\"";
+    json += relayLightOn ? "on" : "off";
+    json += "\"}";
+    request->send(200, "application/json", json);
+  });
+
   server.begin();
   Serial.println("Web server started");
 }
@@ -1864,6 +2052,175 @@ String escapeJSON(String str) {
     else escaped += c;
   }
   return escaped;
+}
+
+// ========== RELAY CONTROL ==========
+void setRelay(int pin, bool on) {
+  digitalWrite(pin, on ? RELAY_ON : RELAY_OFF);
+}
+
+void initRelays() {
+  pinMode(RELAY_AIR_PUMP_PIN, OUTPUT);
+  pinMode(RELAY_LIGHT_PIN, OUTPUT);
+  setRelay(RELAY_AIR_PUMP_PIN, false);
+  setRelay(RELAY_LIGHT_PIN, false);
+  Serial.println("[Relay] Air pump (GPIO 25) and light (GPIO 32) initialized OFF");
+}
+
+// Fetch full device configuration from the backend on startup.
+// Applies: thresholds, sampling interval, relay states, and relay schedules.
+void fetchDeviceConfig() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  String url = String(BACKEND_CONFIG_URL_BASE) + DEVICE_ID + "/config";
+  HTTPClient http;
+  http.setTimeout(8000);
+  http.begin(url);
+
+  int httpCode = http.GET();
+  if (httpCode != 200) {
+    http.end();
+    Serial.printf("[Config] Fetch failed: HTTP %d\n", httpCode);
+    return;
+  }
+
+  String body = http.getString();
+  http.end();
+
+  DynamicJsonDocument doc(2048);
+  if (deserializeJson(doc, body)) {
+    Serial.println("[Config] Failed to parse config JSON");
+    return;
+  }
+
+  // --- Thresholds & sampling interval ---
+  cfg_ph_min    = doc["ph_min"]    | cfg_ph_min;
+  cfg_ph_max    = doc["ph_max"]    | cfg_ph_max;
+  cfg_ec_min    = doc["ec_value_min"] | cfg_ec_min;
+  cfg_ec_max    = doc["ec_value_max"] | cfg_ec_max;
+  cfg_wtemp_min = doc["water_temp_min"] | cfg_wtemp_min;
+  cfg_wtemp_max = doc["water_temp_max"] | cfg_wtemp_max;
+  cfg_atemp_min = doc["air_temp_min"]   | cfg_atemp_min;
+  cfg_atemp_max = doc["air_temp_max"]   | cfg_atemp_max;
+  cfg_light_min = doc["light_intensity_min"] | cfg_light_min;
+  cfg_light_max = doc["light_intensity_max"] | cfg_light_max;
+
+  int samplingIntervalSec = doc["sampling_interval"] | 30;
+  cfg_sampling_interval_ms = (unsigned long)samplingIntervalSec * 1000UL;
+
+  Serial.printf("[Config] Fetched — sampling=%ds ph=[%.1f,%.1f] ec=[%.2f,%.2f]\n",
+    samplingIntervalSec, cfg_ph_min, cfg_ph_max, cfg_ec_min, cfg_ec_max);
+
+  // --- Relay states ---
+  JsonArray relays = doc["relays"].as<JsonArray>();
+  for (JsonObject relay : relays) {
+    int id     = relay["relay_id"] | -1;
+    bool state = relay["status"]   | false;
+    if (id == 0) { relayAirPumpOn = state; setRelay(RELAY_AIR_PUMP_PIN, relayAirPumpOn); }
+    else if (id == 1) { relayLightOn = state; setRelay(RELAY_LIGHT_PIN, relayLightOn); }
+  }
+  Serial.println("[Config] Relay states applied");
+
+  // --- Schedules ---
+  relayScheduleCount = 0;
+  JsonArray schedules = doc["schedules"].as<JsonArray>();
+  for (JsonObject sched : schedules) {
+    if (relayScheduleCount >= MAX_RELAY_SCHEDULES) break;
+
+    RelaySchedule& s = relaySchedules[relayScheduleCount];
+    s.enabled     = sched["enabled"] | true;
+    s.startHour   = sched["startHour"]   | 0;
+    s.startMinute = sched["startMinute"] | 0;
+    s.stopHour    = sched["stopHour"]    | 0;
+    s.stopMinute  = sched["stopMinute"]  | 0;
+
+    // Build day bitmask from days array (0=Sun … 6=Sat)
+    s.days = 0;
+    JsonArray daysArr = sched["days"].as<JsonArray>();
+    for (int d : daysArr) {
+      if (d >= 0 && d <= 6) s.days |= (1 << d);
+    }
+
+    // Build relay bitmask from relays array
+    s.relayMask = 0;
+    JsonArray relayIds = sched["relays"].as<JsonArray>();
+    for (int r : relayIds) {
+      if (r == 0 || r == 1) s.relayMask |= (1 << r);
+    }
+
+    if (s.enabled) relayScheduleCount++;
+  }
+  Serial.printf("[Config] Loaded %d schedule(s)\n", relayScheduleCount);
+}
+
+// Check relay schedules against current RTC time and fire setRelay() accordingly.
+// Called every 60 s from sensorTask.
+void checkRelaySchedules() {
+  if (relayScheduleCount == 0 || !rtcValid) return;
+
+  RtcDateTime now = getRTCTime();
+  uint8_t hour   = now.Hour();
+  uint8_t minute = now.Minute();
+  uint8_t dow    = now.DayOfWeek();  // 0=Sunday
+
+  for (int i = 0; i < relayScheduleCount; i++) {
+    RelaySchedule& s = relaySchedules[i];
+    if (!s.enabled) continue;
+    if (!(s.days & (1 << dow))) continue;  // not today
+
+    // Turn ON at start time
+    if (hour == s.startHour && minute == s.startMinute) {
+      if (s.relayMask & 0x01) { relayAirPumpOn = true;  setRelay(RELAY_AIR_PUMP_PIN, true); }
+      if (s.relayMask & 0x02) { relayLightOn   = true;  setRelay(RELAY_LIGHT_PIN, true); }
+      Serial.printf("[Schedule] Relay ON  (schedule %d) at %02d:%02d\n", i, hour, minute);
+    }
+    // Turn OFF at stop time
+    if (hour == s.stopHour && minute == s.stopMinute) {
+      if (s.relayMask & 0x01) { relayAirPumpOn = false; setRelay(RELAY_AIR_PUMP_PIN, false); }
+      if (s.relayMask & 0x02) { relayLightOn   = false; setRelay(RELAY_LIGHT_PIN, false); }
+      Serial.printf("[Schedule] Relay OFF (schedule %d) at %02d:%02d\n", i, hour, minute);
+    }
+  }
+}
+
+// Fetch relay states from the backend and apply them to the GPIO pins.
+// relay_id 0 → GPIO 25 (air pump), relay_id 1 → GPIO 32 (light).
+void fetchAndApplyRelayStates() {
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  String url = String(BACKEND_RELAY_URL_BASE) + DEVICE_ID + "/relay-states";
+  HTTPClient http;
+  http.setTimeout(8000);
+  http.begin(url);
+
+  int httpCode = http.GET();
+  if (httpCode == 200) {
+    String body = http.getString();
+    http.end();
+
+    StaticJsonDocument<512> doc;
+    if (deserializeJson(doc, body)) {
+      Serial.println("[Relay] Failed to parse relay-states JSON");
+      return;
+    }
+
+    JsonArray relays = doc["relays"].as<JsonArray>();
+    for (JsonObject relay : relays) {
+      int id     = relay["relay_id"] | -1;
+      bool state = relay["status"]   | false;
+      if (id == 0) {
+        relayAirPumpOn = state;
+        setRelay(RELAY_AIR_PUMP_PIN, relayAirPumpOn);
+      } else if (id == 1) {
+        relayLightOn = state;
+        setRelay(RELAY_LIGHT_PIN, relayLightOn);
+      }
+    }
+    Serial.println("[Relay] States synced from backend");
+  } else {
+    http.end();
+    Serial.printf("[Relay] relay-states fetch failed: HTTP %d\n", httpCode);
+  }
 }
 
 // ========== INITIALIZATION ==========
@@ -1990,7 +2347,8 @@ void setup() {
   
   analogReadResolution(12);
   analogSetAttenuation(ADC_11db);
-  
+
+  initRelays();
   initSensors();
   initRTC();
   initSDCard();

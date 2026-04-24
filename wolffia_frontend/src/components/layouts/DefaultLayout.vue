@@ -180,6 +180,10 @@ import {
   Activity,
 } from "lucide-vue-next";
 import { useAlertsStore } from "@/stores/module/alerts";
+import { useFarmsStore } from "@/stores/module/farms";
+import { useDevicesStore } from "@/stores/module/devices";
+import { useSensorDataStore } from "@/stores/module/sensorData";
+import { useAuthStore } from "@/stores/module/auth";
 import { useWebSocket } from "@/composables/useWebSocket";
 
 export default {
@@ -206,6 +210,10 @@ export default {
     const route = useRoute();
     const router = useRouter();
     const alertsStore = useAlertsStore();
+    const farmsStore = useFarmsStore();
+    const devicesStore = useDevicesStore();
+    const sensorDataStore = useSensorDataStore();
+    const authStore = useAuthStore();
     const ws = useWebSocket();
 
     const sidebarCollapsed = ref(false);
@@ -303,9 +311,13 @@ export default {
       return then.toLocaleDateString();
     };
 
-    const handleLogout = () => {
-      localStorage.removeItem("auth_token");
+    const handleLogout = async () => {
       ws.disconnect();
+      farmsStore.$reset();
+      devicesStore.$reset();
+      sensorDataStore.$reset();
+      alertsStore.$reset();
+      await authStore.logout();
       router.push("/login");
     };
 

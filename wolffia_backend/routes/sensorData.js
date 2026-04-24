@@ -7,7 +7,7 @@ import Alert from "../models/Alert.js";
 import DeviceConfiguration from "../models/DeviceConfiguration.js";
 import SystemLog from "../models/SystemLog.js";
 import { authenticate } from "../middleware/auth.js";
-import { broadcastToDevice } from "../server.js";
+import { broadcastToDevice, broadcastToUser } from "../server.js";
 
 const router = express.Router();
 
@@ -122,7 +122,9 @@ const checkThresholds = async (device, config, sensorPayload) => {
     device.latest_alert_id = alert._id;
     await device.save();
 
-    broadcastToDevice(device.device_id, {
+    // Broadcast to the device owner so the toast fires on any page,
+    // not just when the client happens to be subscribed to this device.
+    broadcastToUser(device.user_id, {
       type: "alert",
       data: alert,
     });

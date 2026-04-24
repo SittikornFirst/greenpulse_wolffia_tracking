@@ -142,40 +142,45 @@ export default {
 <style scoped>
 .relay-card {
   background: white;
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   padding: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  margin-bottom: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border: 1px solid #f0fdf4;
+  border-left: 4px solid #10b981;
 }
 
 .card-header {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #f3f4f6;
 }
-
 .card-header h2 {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
-  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-
 .subtitle {
-  color: #6b7280;
-  font-size: 0.875rem;
+  color: #9ca3af;
+  font-size: 0.8rem;
   margin: 0;
 }
 
 .empty-state {
-  padding: 2rem;
+  padding: 2.5rem;
   text-align: center;
-  color: #6b7280;
+  color: #9ca3af;
+  font-size: 0.875rem;
+  background: #f9fafb;
+  border-radius: 0.75rem;
 }
 
+/* Grid of relay cards */
 .relays-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 1rem;
 }
 
@@ -183,22 +188,42 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.25rem;
+  padding: 1.125rem 1.25rem;
   background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 0.5rem;
-  transition: border-color 0.2s;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 0.875rem;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
 }
-
+.relay-item::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px;
+  height: 100%;
+  background: #e5e7eb;
+  transition: background 0.2s;
+}
+.relay-item:has(input:checked)::before {
+  background: #10b981;
+}
+.relay-item:has(input:checked) {
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
 .relay-item:hover {
   border-color: #d1d5db;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
+/* Info column */
 .relay-info {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.375rem;
   flex: 1;
+  padding-left: 0.5rem;
 }
 
 .display-name-group {
@@ -206,135 +231,120 @@ export default {
   align-items: center;
   gap: 0.5rem;
 }
-
 .relay-name {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 1rem;
+  font-weight: 700;
+  color: #111827;
+  font-size: 0.95rem;
 }
 
 .edit-btn {
-  color: #9ca3af;
+  color: #d1d5db;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0.25rem;
+  padding: 0.2rem;
   border-radius: 0.25rem;
   display: flex;
   align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.15s;
 }
+.edit-btn:hover { color: #10b981; background: #d1fae5; }
 
-.edit-btn:hover {
-  color: #3b82f6;
-  background: #eff6ff;
-}
-
+/* GPIO pin badge */
 .relay-pin {
-  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.7rem;
+  font-family: 'SF Mono', 'Menlo', 'Consolas', monospace;
+  font-weight: 600;
   color: #6b7280;
-  font-family: monospace;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  width: fit-content;
 }
 
+/* Edit mode */
 .edit-name-group {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
-
 .name-input {
-  padding: 0.25rem 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 0.25rem;
+  padding: 0.3rem 0.5rem;
+  border: 1.5px solid #10b981;
+  border-radius: 0.375rem;
   font-size: 0.875rem;
-  width: 120px;
+  width: 130px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.1);
 }
-
 .action-btn {
   background: none;
   border: none;
-  padding: 0.25rem;
-  border-radius: 0.25rem;
+  padding: 0.3rem;
+  border-radius: 0.375rem;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
+  transition: all 0.15s;
 }
-
-.action-btn.save { color: #10b981; }
-.action-btn.save:hover { background: #d1fae5; }
+.action-btn.save   { color: #10b981; }
+.action-btn.save:hover   { background: #d1fae5; }
 .action-btn.cancel { color: #ef4444; }
 .action-btn.cancel:hover { background: #fee2e2; }
 
-/* Toggle Switch Styles */
+/* Toggle column */
 .relay-toggle {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  min-width: 60px;
+  gap: 0.4rem;
+  min-width: 64px;
 }
 
+/* Toggle switch — bigger and more tactile */
 .switch {
   position: relative;
   display: inline-block;
-  width: 50px;
-  height: 26px;
+  width: 54px;
+  height: 28px;
 }
-
-.switch input { 
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
+.switch input { opacity: 0; width: 0; height: 0; }
 
 .slider {
   position: absolute;
   cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #e5e7eb;
-  transition: .4s;
+  inset: 0;
+  background: #d1d5db;
+  transition: 0.25s cubic-bezier(0.4,0,0.2,1);
 }
-
 .slider:before {
   position: absolute;
   content: "";
-  height: 20px;
-  width: 20px;
+  height: 22px;
+  width: 22px;
   left: 3px;
   bottom: 3px;
-  background-color: white;
-  transition: .4s;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  background: white;
+  transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
 }
+.slider.round           { border-radius: 34px; }
+.slider.round:before    { border-radius: 50%; }
 
-input:checked + .slider {
-  background-color: #10b981;
-}
+input:checked + .slider        { background: #10b981; }
+input:checked + .slider:before { transform: translateX(26px); }
+input:disabled + .slider       { opacity: 0.45; cursor: not-allowed; }
 
-input:disabled + .slider {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-input:checked + .slider:before {
-  transform: translateX(24px);
-}
-
-.slider.round {
-  border-radius: 34px;
-}
-
-.slider.round:before {
-  border-radius: 50%;
-}
-
+/* Status text */
 .status-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
-
-.status-on { color: #10b981; }
-.status-off { color: #6b7280; }
+.status-on  { color: #10b981; }
+.status-off { color: #9ca3af; }
 </style>

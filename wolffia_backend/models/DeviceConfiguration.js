@@ -35,12 +35,8 @@ const deviceConfigurationSchema = new mongoose.Schema({
             pin: Number           // 5, 13, 12, 15, 2, 30
         }],
         default: [
-            { relay_id: 0, name: "Relay 1", status: false, pin: 5 },
-            { relay_id: 1, name: "Relay 2", status: false, pin: 13 },
-            { relay_id: 2, name: "Relay 3", status: false, pin: 12 },
-            { relay_id: 3, name: "Relay 4", status: false, pin: 15 },
-            { relay_id: 4, name: "Relay 5", status: false, pin: 2 },
-            { relay_id: 5, name: "Relay 6", status: false, pin: 30 }
+            { relay_id: 0, name: "", status: false, pin: 25 },
+            { relay_id: 1, name: "", status: false, pin: 32 }
         ]
     },
     schedules: {

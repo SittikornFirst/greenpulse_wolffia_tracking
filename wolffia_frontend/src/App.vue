@@ -82,7 +82,7 @@ export default {
         try {
           await alertsStore.fetchAlerts();
           // Keep WebSocket alive across all routes so AlertToast works everywhere
-          await ws.setup({ autoConnect: true, subscribeToDevices: false });
+          await ws.setup({ autoConnect: true, subscribeToDevices: true });
         } catch (error) {
           console.error("Failed to initialize app services:", error);
         }

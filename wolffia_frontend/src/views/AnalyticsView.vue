@@ -87,14 +87,79 @@
         />
       </div>
 
+      <!-- Recommendations panel -->
+      <div v-if="recommendations.length > 0" class="recommendations-panel">
+        <div class="recommendations-header">
+          <h2>Recommendations</h2>
+          <span class="rec-subtitle">Based on average readings for the selected period</span>
+        </div>
+        <div class="recommendations-grid">
+          <div
+            v-for="rec in recommendations"
+            :key="rec.id"
+            class="recommendation-card"
+            :class="rec.severity"
+          >
+            <div class="rec-icon">{{ rec.icon }}</div>
+            <div class="rec-content">
+              <div class="rec-title">{{ rec.title }}</div>
+              <div class="rec-value">
+                Current avg: <strong>{{ rec.avgFormatted }}</strong>
+                &nbsp;·&nbsp;
+                Target: {{ rec.rangeMin }} – {{ rec.rangeMax }} {{ rec.unit }}
+              </div>
+              <div class="rec-message">{{ rec.message }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="tableRows.length > 0" class="recommendations-ok">
+        <span class="rec-ok-icon">✓</span>
+        All sensor readings are within optimal range.
+      </div>
+
+      <!-- Pearson Correlation Panel -->
+      <div v-if="correlations.length > 0" class="correlation-panel">
+        <div class="correlation-header">
+          <h2>Correlation Analysis</h2>
+          <span class="corr-subtitle">Pearson r between sensor pairs for the selected period · |r| ≥ 0.7 strong · 0.4–0.7 moderate · &lt; 0.4 weak</span>
+        </div>
+        <div class="correlation-grid">
+          <div
+            v-for="c in correlations"
+            :key="c.id"
+            class="corr-card"
+            :class="c.strengthClass"
+          >
+            <div class="corr-pair">
+              <span class="corr-x">{{ c.labelX }}</span>
+              <span class="corr-arrow">↔</span>
+              <span class="corr-y">{{ c.labelY }}</span>
+            </div>
+            <div class="corr-value">{{ c.rFormatted }}</div>
+            <div class="corr-bar-wrap">
+              <div
+                class="corr-bar"
+                :style="{
+                  width: Math.abs(c.r) * 100 + '%',
+                  background: c.barColor,
+                  marginLeft: c.r < 0 ? 'auto' : '0',
+                }"
+              ></div>
+            </div>
+            <div class="corr-label">{{ c.strengthLabel }} {{ c.direction }}</div>
+            <div v-if="c.insight" class="corr-insight">{{ c.insight }}</div>
+          </div>
+        </div>
+      </div>
+
       <DataTable
         :columns="tableColumns"
         :data="tableRows"
         :loading="loading"
         title="Recent Readings"
-        :subtitle="`Showing latest ${tableRows.length} entries`"
-        :pagination="true"
-        :page-size="entriesPerPage"
+        :subtitle="`Page ${currentPage} of ${totalPages} · ${totalEntries} total entries`"
+        :pagination="false"
       >
         <template #cell-timestamp="{ value }">
           {{ formatTimestamp(value) }}
@@ -141,6 +206,36 @@
           >
         </template>
       </DataTable>
+
+      <!-- Server-side pagination bar -->
+      <div v-if="totalPages > 1" class="pagination-bar">
+        <span class="pagination-info">
+          Showing
+          {{ (currentPage - 1) * entriesPerPage + 1 }}–{{ Math.min(currentPage * entriesPerPage, totalEntries) }}
+          of {{ totalEntries }} entries
+        </span>
+        <div class="pagination-controls">
+          <button
+            class="btn btn-outline page-nav"
+            :disabled="currentPage === 1"
+            @click="handlePageChange(currentPage - 1)"
+          >‹ Prev</button>
+          <span v-if="visiblePages[0] > 1" class="page-ellipsis">…</span>
+          <button
+            v-for="page in visiblePages"
+            :key="page"
+            class="page-number"
+            :class="{ active: page === currentPage }"
+            @click="handlePageChange(page)"
+          >{{ page }}</button>
+          <span v-if="visiblePages[visiblePages.length - 1] < totalPages" class="page-ellipsis">…</span>
+          <button
+            class="btn btn-outline page-nav"
+            :disabled="currentPage === totalPages"
+            @click="handlePageChange(currentPage + 1)"
+          >Next ›</button>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -413,6 +508,218 @@ export default {
 
     const tableRows = computed(() => allTableRows.value);
 
+    // ── Pearson correlation helpers ──────────────────────────────────────────
+    const pearson = (xs, ys) => {
+      const n = xs.length;
+      if (n < 3) return null;
+      const mx = xs.reduce((s, v) => s + v, 0) / n;
+      const my = ys.reduce((s, v) => s + v, 0) / n;
+      let num = 0, dx2 = 0, dy2 = 0;
+      for (let i = 0; i < n; i++) {
+        const dx = xs[i] - mx, dy = ys[i] - my;
+        num += dx * dy;
+        dx2 += dx * dx;
+        dy2 += dy * dy;
+      }
+      const denom = Math.sqrt(dx2 * dy2);
+      return denom === 0 ? null : num / denom;
+    };
+
+    const extractPairs = (keyA, keyB) => {
+      const xs = [], ys = [];
+      for (const row of allTableRows.value) {
+        const x = row[keyA]?.value, y = row[keyB]?.value;
+        if (typeof x === "number" && typeof y === "number" && !isNaN(x) && !isNaN(y)) {
+          xs.push(x); ys.push(y);
+        }
+      }
+      return { xs, ys };
+    };
+
+    const strengthInfo = (r) => {
+      const abs = Math.abs(r);
+      if (abs >= 0.7) return { label: "Strong", cls: "strong" };
+      if (abs >= 0.4) return { label: "Moderate", cls: "moderate" };
+      return { label: "Weak", cls: "weak" };
+    };
+
+    const correlations = computed(() => {
+      if (allTableRows.value.length < 5) return [];
+
+      const pairs = [
+        {
+          id: "waterTemp_tds",
+          keyX: "temperature_water_c", labelX: "Water Temp",
+          keyY: "tds",               labelY: "TDS",
+          insight: "Rising water temp typically increases TDS as salts become more soluble.",
+        },
+        {
+          id: "waterTemp_ec",
+          keyX: "temperature_water_c", labelX: "Water Temp",
+          keyY: "ec",                labelY: "EC",
+          insight: "EC and water temperature often move together due to ion mobility.",
+        },
+        {
+          id: "airTemp_humidity",
+          keyX: "temperature_air_c", labelX: "Air Temp",
+          keyY: "humidity",          labelY: "Humidity",
+          insight: "Warm air holds more moisture; an inverse relation may indicate poor ventilation.",
+        },
+        {
+          id: "ph_ec",
+          keyX: "ph",  labelX: "pH",
+          keyY: "ec",  labelY: "EC",
+          insight: "Low pH with high EC may suggest over-acidification from nutrient salts.",
+        },
+        {
+          id: "light_airTemp",
+          keyX: "light_intensity", labelX: "Light",
+          keyY: "temperature_air_c", labelY: "Air Temp",
+          insight: "High light intensity from grow lamps raises air temperature in enclosed environments.",
+        },
+        {
+          id: "waterTemp_ph",
+          keyX: "temperature_water_c", labelX: "Water Temp",
+          keyY: "ph",                  labelY: "pH",
+          insight: "Warmer water lowers CO₂ solubility, which can raise pH slightly.",
+        },
+      ];
+
+      return pairs
+        .map((pair) => {
+          const { xs, ys } = extractPairs(pair.keyX, pair.keyY);
+          const r = pearson(xs, ys);
+          if (r === null) return null;
+
+          const { label, cls } = strengthInfo(r);
+          const direction = r >= 0 ? "positive ↑" : "negative ↓";
+          const barColor =
+            cls === "strong"   ? (r > 0 ? "#10b981" : "#ef4444") :
+            cls === "moderate" ? (r > 0 ? "#34d399" : "#f87171") :
+                                 "#9ca3af";
+
+          return {
+            id: pair.id,
+            labelX: pair.labelX,
+            labelY: pair.labelY,
+            r,
+            rFormatted: r.toFixed(3),
+            strengthLabel: label,
+            strengthClass: cls,
+            direction,
+            barColor,
+            insight: Math.abs(r) >= 0.4 ? pair.insight : null,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+    });
+
+    const recommendations = computed(() => {
+      if (!allTableRows.value.length) return [];
+
+      const checks = [
+        {
+          id: "ph",
+          key: "ph",
+          thresholdKey: "ph_value",
+          title: "pH Level",
+          unit: "pH",
+          icon: "💧",
+          decimals: 2,
+          low: "pH is too low. Add pH Up solution to raise it toward the target range.",
+          high: "pH is too high. Add pH Down solution to lower it toward the target range.",
+        },
+        {
+          id: "ec",
+          key: "ec",
+          thresholdKey: "ec_value",
+          title: "Nutrient EC",
+          unit: "mS/cm",
+          icon: "⚗️",
+          decimals: 2,
+          low: "EC is too low. Add more nutrient concentrate to the reservoir.",
+          high: "EC is too high. Dilute the solution with fresh water.",
+        },
+        {
+          id: "water_temp",
+          key: "temperature_water_c",
+          thresholdKey: "water_temperature_c",
+          title: "Water Temperature",
+          unit: "°C",
+          icon: "🌡️",
+          decimals: 1,
+          low: "Water temperature is too cold. Check the water heater.",
+          high: "Water temperature is too warm. Improve cooling or shading.",
+        },
+        {
+          id: "air_temp",
+          key: "temperature_air_c",
+          thresholdKey: "air_temperature_c",
+          title: "Air Temperature",
+          unit: "°C",
+          icon: "🌬️",
+          decimals: 1,
+          low: "Air temperature is too low. Consider supplemental heating.",
+          high: "Air temperature is too high. Increase ventilation or airflow.",
+        },
+        {
+          id: "humidity",
+          key: "humidity",
+          thresholdKey: "air_humidity",
+          title: "Air Humidity",
+          unit: "%",
+          icon: "💨",
+          decimals: 1,
+          low: "Humidity is too low. Add misting or a humidifier.",
+          high: "Humidity is too high. Improve air circulation to prevent disease.",
+        },
+        {
+          id: "light",
+          key: "light_intensity",
+          thresholdKey: "light_intensity",
+          title: "Light Intensity",
+          unit: "lux",
+          icon: "☀️",
+          decimals: 0,
+          low: "Light intensity is too low. Check grow lights or clean the sensor.",
+          high: "Light intensity is very high. Consider reducing photoperiod or shading.",
+        },
+      ];
+
+      return checks
+        .map((check) => {
+          const values = allTableRows.value
+            .map((row) => row[check.key]?.value)
+            .filter((v) => typeof v === "number");
+          if (!values.length) return null;
+
+          const avg = values.reduce((s, v) => s + v, 0) / values.length;
+          const threshold = THRESHOLDS[check.thresholdKey];
+          if (!threshold) return null;
+
+          const status = getValueStatus(check.thresholdKey, avg);
+          if (status === "normal") return null;
+
+          return {
+            id: check.id,
+            title: check.title,
+            icon: check.icon,
+            message: avg < threshold.min ? check.low : check.high,
+            severity: status,
+            avg,
+            avgFormatted:
+              check.decimals === 0
+                ? Math.round(avg).toLocaleString() + " " + check.unit
+                : avg.toFixed(check.decimals) + " " + check.unit,
+            rangeMin: threshold.min,
+            rangeMax: threshold.max,
+            unit: check.unit,
+          };
+        })
+        .filter(Boolean);
+    });
+
     const tableColumns = [
       { key: "timestamp", label: "Timestamp", sortable: true },
       { key: "ph", label: "pH", sortable: true },
@@ -560,6 +867,8 @@ export default {
       tableRows,
       visiblePages,
       allTableRows,
+      recommendations,
+      correlations,
       refreshData,
       handlePageChange,
       formatTimestamp,
@@ -890,6 +1199,291 @@ export default {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* ===== Recommendations ===== */
+.recommendations-panel {
+  background: white;
+  border-radius: 1.5rem;
+  border: 1px solid #f3f4f6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 1.75rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.recommendations-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.recommendations-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.rec-subtitle {
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.recommendation-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  border-left: 4px solid transparent;
+}
+
+.recommendation-card.warning {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+
+.recommendation-card.critical {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}
+
+.rec-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.rec-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #111827;
+  margin-bottom: 0.2rem;
+}
+
+.rec-value {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-bottom: 0.35rem;
+}
+
+.rec-message {
+  font-size: 0.875rem;
+  color: #374151;
+  line-height: 1.4;
+}
+
+.recommendations-ok {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 1rem;
+  padding: 1rem 1.5rem;
+  color: #166534;
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+}
+
+.rec-ok-icon {
+  font-size: 1.25rem;
+  color: #10b981;
+  font-weight: 800;
+}
+
+/* ===== Pagination bar ===== */
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 2rem;
+  background: white;
+  border-radius: 1.25rem;
+  border: 1px solid #f3f4f6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  margin-top: 1rem;
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.page-nav {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+}
+
+.page-ellipsis {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  padding: 0 0.25rem;
+}
+
+.page-number {
+  width: 2.25rem;
+  height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid #e5e7eb;
+  background: white;
+  color: #374151;
+}
+
+.page-number:hover:not(.active) {
+  background: #f3f4f6;
+}
+
+.page-number.active {
+  background: #10b981;
+  color: white;
+  border-color: #10b981;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+/* ===== Correlation Analysis ===== */
+.correlation-panel {
+  background: white;
+  border-radius: 1.5rem;
+  border: 1px solid #f3f4f6;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 1.75rem 2rem;
+  margin-bottom: 2rem;
+}
+
+.correlation-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.correlation-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.corr-subtitle {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  line-height: 1.4;
+}
+
+.correlation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.corr-card {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 1rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: box-shadow 0.15s;
+}
+
+.corr-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+}
+
+.corr-card.strong  { border-left: 3px solid #10b981; }
+.corr-card.moderate { border-left: 3px solid #f59e0b; }
+.corr-card.weak    { border-left: 3px solid #d1d5db; }
+
+.corr-pair {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.corr-x,
+.corr-y {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #374151;
+  background: #e5e7eb;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.corr-arrow {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.corr-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin: 0.2rem 0;
+}
+
+.corr-bar-wrap {
+  height: 5px;
+  background: #f3f4f6;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.corr-bar {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  min-width: 4px;
+}
+
+.corr-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.corr-card.strong  .corr-label { color: #059669; }
+.corr-card.moderate .corr-label { color: #d97706; }
+
+.corr-insight {
+  font-size: 0.78rem;
+  color: #6b7280;
+  line-height: 1.45;
+  margin-top: 0.2rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
 }
 
 @media (max-width: 1024px) {
