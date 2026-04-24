@@ -896,10 +896,10 @@
 | Embedded Unit (ESP-U) | 11 | 0 | 0 | 11 |
 | Embedded Integration (ESP-I) | 7 | 0 | 0 | 7 |
 | Calibration (CAL) | 8 | 0 | 0 | 8 |
-| Backend API (API) | 10 | 7 | 0 | 0 |
+| Backend API (API) | 10 | 8 | 0 | 0 |
 | Frontend (FE) | 10 | 0 | 10 | 0 |
 | Field Deployment (FD) | 6 | 0 | 0 | 6 |
-| **TOTAL** | **52** | **7** | **10** | **35** |
+| **TOTAL** | **52** | **8** | **10** | **35** |
 
 ### Backend API Results (Automated — 2026-04-24)
 

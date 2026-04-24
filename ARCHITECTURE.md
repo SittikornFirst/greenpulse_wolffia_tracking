@@ -599,14 +599,18 @@ Device ──(1:0..M)► SystemLog
 
 ```javascript
 {
-  device_id: String,
-  alert_type: String,   // "ph_value_low" | "ph_value_high" | "ec_value_low" | …
-  severity: String,     // "warning" | "critical"
+  alert_id: String,            // UUID v4
+  device_id: String,           // ref: Device (by device_id string)
+  data_id: String,             // ref: SensorData (UUID of the reading that triggered the alert)
+  user_id: ObjectId,           // ref: User (device owner)
+  alert_type: String,          // "ph_value_low" | "ph_value_high" | "ec_value_low" | …
+  parameter: String,           // "ph_value" | "ec_value" | "water_temperature_c" | …
+  threshold_value: Number,     // the min/max that was exceeded
+  actual_value: Number,        // actual measured value
   message: String,
-  value: Number,        // actual measured value
-  threshold: Number,    // the min/max that was exceeded
-  status: String,       // "active" → "acknowledged" → "resolved"
-  resolved_at: Date     // set only when status = "resolved"
+  severity: String,            // enum: ["caution"] — single severity level
+  status: String,              // "active" → "acknowledged" → "resolved"
+  resolved_at: Date            // set only when status = "resolved"
 }
 ```
 
@@ -674,9 +678,11 @@ Device ──(1:0..M)► SystemLog
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | POST | `/api/sensor-data` | None | Ingest reading from ESP32; triggers alert check |
+| GET  | `/api/sensor-data/activity` | JWT | Activity log across farmer's devices |
 | GET  | `/api/sensor-data/latest` | JWT | Latest reading for all farmer's devices |
 | GET  | `/api/sensor-data/:deviceId/latest` | JWT | Latest reading for one device |
 | GET  | `/api/sensor-data/:deviceId/history` | JWT | Paginated history (`?page&limit&range&startDate&endDate`) |
+| GET  | `/api/sensor-data/:deviceId/aggregate` | JWT | Aggregated data (`?aggregation=hourly`) |
 
 ### 7.3 Devices
 
@@ -688,6 +694,7 @@ Device ──(1:0..M)► SystemLog
 | POST | `/api/devices` | JWT | Create device (`user_id` for admin assignment) |
 | GET  | `/api/devices/:id` | JWT | Device detail + populated config |
 | PUT  | `/api/devices/:id` | JWT | Update device metadata |
+| PATCH | `/api/devices/:id/status` | JWT | Update device status (active/inactive/maintenance) |
 | DELETE | `/api/devices/:id` | JWT | Soft-delete device |
 | PUT  | `/api/devices/:id/configuration` | JWT | Update thresholds & sampling interval |
 | PUT  | `/api/devices/:id/relays/:relayId` | JWT | Toggle relay or rename |

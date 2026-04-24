@@ -112,30 +112,32 @@ All routes except `/auth/register` and `/auth/login` require `Authorization: Bea
 
 ### Devices — `/api/devices`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | List devices (farmers see only their own) |
-| GET | `/:deviceId` | Get device by ID |
-| POST | `/` | Create device |
-| PUT | `/:deviceId` | Update device |
-| DELETE | `/:deviceId` | Soft-delete device (`?hard=true` for permanent) |
-| PATCH | `/:deviceId/status` | Update device status |
-| PUT | `/:deviceId/configuration` | Update device configuration |
-| PUT | `/:deviceId/relays/:relayId` | Update relay name or status |
-| POST | `/:deviceId/schedules` | Add schedule |
-| PUT | `/:deviceId/schedules/:scheduleId` | Update schedule |
-| DELETE | `/:deviceId/schedules/:scheduleId` | Delete schedule |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/:deviceId/relay-states` | None | ESP32 relay sync — returns current relay ON/OFF states (public) |
+| GET | `/:deviceId/config` | None | ESP32 boot config — returns full config with thresholds, sampling interval, relays, schedules (public) |
+| GET | `/` | JWT | List devices (farmers see only their own) |
+| GET | `/:deviceId` | JWT | Get device by ID |
+| POST | `/` | JWT | Create device |
+| PUT | `/:deviceId` | JWT | Update device |
+| DELETE | `/:deviceId` | JWT | Soft-delete device (`?hard=true` for permanent) |
+| PATCH | `/:deviceId/status` | JWT | Update device status |
+| PUT | `/:deviceId/configuration` | JWT | Update device configuration |
+| PUT | `/:deviceId/relays/:relayId` | JWT | Update relay name or status |
+| POST | `/:deviceId/schedules` | JWT | Add schedule |
+| PUT | `/:deviceId/schedules/:scheduleId` | JWT | Update schedule |
+| DELETE | `/:deviceId/schedules/:scheduleId` | JWT | Delete schedule |
 
 ### Sensor Data — `/api/sensor-data`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/` | Submit a sensor reading (used by ESP32) |
-| GET | `/latest` | Latest reading from all devices |
-| GET | `/:deviceId/latest` | Latest reading for one device |
-| GET | `/:deviceId/history` | Paginated history (`range`, `startDate`, `endDate`, `page`, `limit`) |
-| GET | `/:deviceId/range` | Readings between `startDate` and `endDate` |
-| GET | `/:deviceId/aggregate` | Aggregated data (`aggregation=hourly`) |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/` | None | Submit a sensor reading (used by ESP32) |
+| GET | `/activity` | JWT | Activity log (recent readings across devices) |
+| GET | `/latest` | JWT | Latest reading from all devices |
+| GET | `/:deviceId/latest` | JWT | Latest reading for one device |
+| GET | `/:deviceId/history` | JWT | Paginated history (`range`, `startDate`, `endDate`, `page`, `limit`) |
+| GET | `/:deviceId/aggregate` | JWT | Aggregated data (`aggregation=hourly`) |
 
 ### Alerts — `/api/alerts`
 
@@ -167,10 +169,7 @@ All routes except `/auth/register` and `/auth/login` require `Authorization: Bea
 | Method | Path | Admin | Description |
 |--------|------|-------|-------------|
 | GET | `/dashboard` | No | Dashboard summary (`farmId` param optional) |
-| GET | `/devices/:deviceId/performance` | No | Device performance (`timeRange` param) |
-| GET | `/farms/:farmId/health` | No | Farm health score |
-| GET | `/export` | No | Export data as file (blob) |
-| GET | `/min-max/:deviceId` | No | Min/max sensor values |
+| GET | `/min-max/:deviceId` | No | Min/max sensor values (`range`, `startDate`, `endDate`) |
 | GET | `/admin/stats` | Yes | System-wide statistics |
 
 ### Users — `/api/users` (Admin only)
@@ -345,9 +344,10 @@ The frontend `normalizeReading()` in `sensorData.js` store applies the same heur
 
 The firmware runs on the ESP32 using the Arduino framework:
 
-- Reads sensors over I2C / ADC at a configurable interval
+- Reads sensors over I2C / ADC at an interval fetched from `GET /api/devices/:id/config` on boot (default 30 s)
+- On boot, fetches full device configuration (thresholds, sampling interval, relay states, schedules) from the public `/config` endpoint
 - Connects to WiFi using credentials stored in flash
-- POSTs JSON sensor readings to `POST /api/sensor-data`
+- POSTs JSON sensor readings to `POST /api/sensor-data` (public — no JWT required)
 
 Payload fields:
 ```json
@@ -365,7 +365,7 @@ Payload fields:
 }
 ```
 
-- On HTTP 401 the device retries after a backoff period
+- On network failure or backend error, the payload is saved to SD card and batch-uploaded on reconnect (no data loss)
 - OTA firmware updates are not yet implemented
 
 ---
@@ -418,8 +418,8 @@ The embedded software is developed using the Arduino framework targeting the ESP
 
 The web dashboard is a Single Page Application (SPA) built with Vue 3 using the Composition API, Vite 7, and Pinia for state management. It utilizes Chart.js for data visualization.
 
-*   **State Management:** Pinia stores for `auth`, `farms`, `devices`, `sensorData`, and `alerts` act as the single source of truth. To ensure data privacy between different users, the `logout()` function calls `$reset()` on all stores to purge stale data.
-*   **Real-time WebSocket Synchronization:** A `useWebSocket` composable establishes a continuous connection to the backend at `ws://backend:3000/ws`. It listens for server-pushed events like `sensorReading` and `alert` payloads, instantly updating the Pinia stores and triggering Chart.js widgets to re-render without a page refresh.
+*   **State Management:** Pinia stores for `auth`, `farms`, `devices`, `sensorData`, and `alerts` act as the single source of truth. To ensure data privacy between different users, the `logout()` function explicitly nullifies all reactive state (`token`, `userName`, `userRole`) and clears `localStorage`, preventing stale data from leaking between sessions.
+*   **Real-time WebSocket Synchronization:** A `useWebSocket` composable establishes a continuous connection to the backend at the URL defined by `VITE_WS_URL` (defaults to `ws://localhost:3000/ws`). It listens for server-pushed events like `sensorReading` and `alert` payloads, instantly updating the Pinia stores and triggering Chart.js widgets to re-render without a page refresh.
 *   **Analytics & Visuals:** The interface implements server-side pagination to handle large historical datasets efficiently. It also computes automated insights, such as Pearson Correlation for evaluating the relationships between sensor parameters, and displays dynamic actionable recommendation cards when out-of-range parameters are detected.
 
 #### 5.2.2 Backend Implementation
