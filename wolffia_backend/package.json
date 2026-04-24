@@ -4,6 +4,9 @@
   "description": "GreenPulse v1 IoT Water Quality Monitoring Backend",
   "main": "server.js",
   "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
@@ -12,7 +15,6 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dns": "^0.2.2",
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
     "express-mongo-sanitize": "^2.2.0",
@@ -22,8 +24,10 @@
     "hpp": "^0.2.3",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
-    "nodemon": "^3.1.11",
     "ws": "^8.14.2",
     "xss-clean": "^0.1.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
   }
 }

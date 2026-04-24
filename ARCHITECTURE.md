@@ -618,47 +618,144 @@ Device ──(1:0..M)► SystemLog
 
 ## 6. Deployment Architecture
 
+The GreenPulse platform is split across three independently-hosted tiers plus an edge tier of ESP32 devices at the farm site. Each tier is deployed via a dedicated provider chosen for its fit to the workload.
+
 ```
-┌──────────────────────────────────────────────────────────┐
-│                    FARM SITE                             │
-│                                                          │
-│  ┌─────────────────┐     ┌──────────────────────┐        │
-│  │  GreenPulse     │     │  Local Web Interface  │        │
-│  │  ESP32 Node     │────►│  AsyncWebServer :80   │        │
-│  │  (per basin)    │     │  (same-LAN access)    │        │
-│  └────────┬────────┘     └──────────────────────┘        │
-│           │ Wi-Fi (2.4 GHz)                              │
-└───────────┼──────────────────────────────────────────────┘
-            │
-            │ HTTPS (TLS)
-            ▼
-┌──────────────────────────────────────────────────────────┐
-│                   CLOUD (Render.com)                     │
-│                                                          │
-│  ┌─────────────────────────────────────────────────┐     │
-│  │         Node.js / Express  (port 3000)          │     │
-│  │  ┌──────────────┐  ┌────────────────────────┐   │     │
-│  │  │  REST API    │  │  WebSocket Server (/ws) │   │     │
-│  │  └──────┬───────┘  └───────────┬────────────┘   │     │
-│  └─────────┼─────────────────────┼────────────────┘     │
-│            │                     │                       │
-│  ┌─────────▼─────────────────────▼────────────────┐     │
-│  │              MongoDB Atlas                      │     │
-│  │         (7 collections, cloud cluster)          │     │
-│  └─────────────────────────────────────────────────┘     │
-│                                                          │
-│  ┌──────────────────────────────────────────────────┐    │
-│  │   Vue 3 SPA  (Vite build, served as static CDN)  │    │
-│  └──────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────┘
-            │
-            │ HTTPS + WebSocket
-            ▼
-┌──────────────────────────────────────────────────────────┐
-│              FARMER / ADMIN  (Browser)                   │
-│  Dashboard · Analytics · Alerts · Device Config          │
-└──────────────────────────────────────────────────────────┘
+╔══════════════════════════════════════════════════════════════════════════╗
+║                            EDGE TIER — FARM SITE                          ║
+║                                                                           ║
+║   ┌──────────────────────────────────────────────────────────────────┐    ║
+║   │         ESP32 Node(s) — one per Wolffia cultivation basin        │    ║
+║   │                                                                  │    ║
+║   │   [Sensors: pH, EC/TDS, DS18B20, AHT30, BH1750, DS1302, SD]      │    ║
+║   │   [Control: Relay 0 (Air Pump GPIO 25) · Relay 1 (Light GPIO 32)]│    ║
+║   │                                                                  │    ║
+║   │   Local AsyncWebServer :80  ─ same-LAN emergency control         │    ║
+║   └────────────────────────┬─────────────────────────────────────────┘    ║
+║                            │ Wi-Fi 2.4 GHz                                ║
+╚════════════════════════════╪══════════════════════════════════════════════╝
+                             │ HTTPS / TLS 1.3
+                             │
+                             │  • POST /api/sensor-data        (every N s)
+                             │  • GET  /api/devices/:id/config (on boot)
+                             │  • GET  /api/devices/:id/relay-states (30 s)
+                             │
+                             ▼
+╔══════════════════════════════════════════════════════════════════════════╗
+║                        BACKEND TIER — Render.com                          ║
+║                                                                           ║
+║   ┌──────────────────────────────────────────────────────────────────┐    ║
+║   │  Node.js 18+  ·  Express 5  ·  ws (WebSocket)  ·  port 3000      │    ║
+║   │                                                                  │    ║
+║   │   ┌────────────────┐          ┌────────────────────────────┐     │    ║
+║   │   │  REST API      │          │  WebSocket Server  (/ws)   │     │    ║
+║   │   │  /api/*        │          │  broadcastToUser()         │     │    ║
+║   │   │  JWT + Helmet  │          │  broadcastToDevice()       │     │    ║
+║   │   │  Rate limiter  │          │  Auth via {type:"auth"}    │     │    ║
+║   │   └───────┬────────┘          └────────────┬───────────────┘     │    ║
+║   │           │                                │                     │    ║
+║   │           │         Mongoose 8 ODM         │                     │    ║
+║   └───────────┼────────────────────────────────┼─────────────────────┘    ║
+║               │                                │                          ║
+║               │ TLS 1.3 + SRV DNS              │                          ║
+║               ▼                                │                          ║
+║   ┌──────────────────────────────┐             │                          ║
+║   │   DATA TIER — MongoDB Atlas  │             │                          ║
+║   │   Cluster: M0 / cloud region │             │                          ║
+║   │                              │             │                          ║
+║   │   Collections:               │             │                          ║
+║   │   • users          • farms   │             │                          ║
+║   │   • devices        • alerts  │             │                          ║
+║   │   • sensordata (time-series) │             │                          ║
+║   │   • deviceconfigurations     │             │                          ║
+║   │   • systemlogs               │             │                          ║
+║   └──────────────────────────────┘             │                          ║
+╚═════════════════════════════════════════════════╪════════════════════════╝
+                             ▲                    │
+                             │ HTTPS REST         │ WebSocket (wss://)
+                             │                    │
+                             │                    ▼
+╔══════════════════════════════════════════════════════════════════════════╗
+║                      FRONTEND TIER — Vercel                               ║
+║                                                                           ║
+║   ┌──────────────────────────────────────────────────────────────────┐    ║
+║   │  Vue 3 PWA (Vite build, served via global CDN)                   │    ║
+║   │                                                                  │    ║
+║   │  • Static assets: HTML/JS/CSS bundles (precached by service      │    ║
+║   │    worker for offline app shell)                                 │    ║
+║   │  • Workbox NetworkFirst for /api/* (5 s timeout, 5 min cache)    │    ║
+║   │  • Installable via Web App Manifest (Add to Home Screen)         │    ║
+║   └──────────────────────────────────────────────────────────────────┘    ║
+╚══════════════════════════════════════════════════════════════════════════╝
+                             ▲
+                             │ HTTPS + WebSocket (wss://)
+                             │
+                             ▼
+╔══════════════════════════════════════════════════════════════════════════╗
+║                        CLIENT TIER — End Users                            ║
+║                                                                           ║
+║   Farmer — Chrome/Safari on phone or desktop                              ║
+║         │  Dashboard · Device Config · Alerts · Analytics                 ║
+║   Admin — Chrome on desktop                                               ║
+║         │  + Users Management · System Activity · Admin Stats             ║
+╚══════════════════════════════════════════════════════════════════════════╝
 ```
+
+### 6.1 Hosting Providers & Rationale
+
+| Tier | Provider | Build Command | Start / Serve | Why |
+|---|---|---|---|---|
+| Edge | ESP32 firmware (flashed locally) | Arduino IDE / PlatformIO build | Boot via 5 V adapter | Custom hardware; no hosting |
+| Backend | **Render.com** (Web Service) | `pnpm install` | `pnpm start` → `node server.js` | Free tier supports long-lived WebSocket connections (Vercel serverless does not) |
+| Database | **MongoDB Atlas** (M0 free cluster) | — | Auto-managed | Native `mongodb+srv://` URI; IP allow-list + SCRAM auth |
+| Frontend | **Vercel** (static deploy) | `pnpm install && pnpm run build` | Static CDN + `dist/` | Global edge CDN, automatic HTTPS, seamless Git→Deploy |
+
+### 6.2 Environment Variables
+
+**Backend (Render)**
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | Injected by Render; server must bind to it |
+| `MONGODB_URI` | `mongodb+srv://user:pass@cluster.xxxxx.mongodb.net/greenpulse` |
+| `JWT_SECRET` | HS256 signing key (≥ 32 chars) |
+| `JWT_EXPIRE` | `24h` |
+| `CORS_ORIGIN` | Vercel production URL, e.g. `https://greenpulse.vercel.app` |
+
+**Frontend (Vercel)**
+
+| Variable | Purpose |
+|---|---|
+| `VITE_API_BASE_URL` | `https://greenpulse-wolffia-tracking.onrender.com/api` |
+| `VITE_WS_URL` | `wss://greenpulse-wolffia-tracking.onrender.com/ws` |
+
+### 6.3 Deployment Flow
+
+```
+   Developer
+       │
+       │  git push origin main
+       ▼
+┌──────────────────┐
+│  GitHub (origin) │
+└─────┬────────┬───┘
+      │        │
+      │        └─────────────► Vercel (webhook)
+      │                           │ pnpm install && pnpm run build
+      │                           │ Deploy dist/ to edge CDN
+      │                           ▼  https://<app>.vercel.app
+      │
+      └─────────────► Render (webhook)
+                        │ pnpm install
+                        │ Start: node server.js
+                        ▼  https://<app>.onrender.com
+```
+
+Both services auto-deploy from the `main` branch. Failed deploys keep the previous version live (zero-downtime rollback).
+
+### 6.4 Package-Manager Standardisation
+
+Both `wolffia_backend/` and `wolffia_frontend/` use **pnpm** exclusively. `pnpm-lock.yaml` is committed; `package-lock.json` is intentionally absent so Render and Vercel unambiguously select pnpm during install. Node ≥ 18 is pinned via `engines.node` in each `package.json`.
 
 ---
 
