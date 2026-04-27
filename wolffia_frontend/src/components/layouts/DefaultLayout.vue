@@ -875,8 +875,16 @@ export default {
     width: 100%;
   }
 
+  /* Force-show the hamburger button on mobile */
   .topbar__menu-btn {
-    display: block;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 31;
+    flex: 0 0 auto;
+    min-width: 40px;
+    min-height: 40px;
   }
 
   .topbar__title {
@@ -887,12 +895,13 @@ export default {
     display: none;
   }
 
-  /* Keep dropdowns anchored to their button on mobile, not centered */
+  /* Anchor dropdowns to the right of their trigger; sensible mobile size */
   .dropdown {
     right: 0;
     left: auto;
     transform: none;
-    min-width: 240px;
+    min-width: 260px;
+    max-width: 280px;
   }
 
   .content {
@@ -905,23 +914,16 @@ export default {
     padding: 0.75rem 1rem;
   }
 
-  .dropdown {
-    right: 0;
-    left: auto;
-    transform: none;
-    min-width: calc(100vw - 2rem);
-    max-width: calc(100vw - 2rem);
-  }
-
+  /* Compact dropdowns on small phones — anchored to the right edge of the screen */
   .notifications-dropdown,
   .user-dropdown {
     position: fixed;
-    top: 64px;
-    right: 1rem;
-    left: 1rem;
-    width: auto;
+    top: 60px;
+    right: 0.75rem;
+    left: auto;
+    width: 260px;
     min-width: 0;
-    max-width: none;
+    max-width: calc(100vw - 1.5rem);
   }
 }
 </style>
