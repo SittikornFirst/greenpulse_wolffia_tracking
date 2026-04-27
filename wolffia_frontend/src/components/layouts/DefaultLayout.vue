@@ -1,7 +1,14 @@
 <template>
   <div class="layout">
+    <!-- Mobile sidebar backdrop -->
+    <div
+      v-if="mobileMenuOpen"
+      class="sidebar-backdrop"
+      @click="closeMobileMenu"
+    ></div>
+
     <!-- Sidebar -->
-    <aside :class="['sidebar', { 'sidebar--collapsed': sidebarCollapsed }]">
+    <aside :class="['sidebar', { 'sidebar--collapsed': sidebarCollapsed, 'sidebar--mobile-open': mobileMenuOpen }]">
       <div class="sidebar__header">
         <div class="sidebar__logo">
           <Leaf :size="32" class="logo-icon" />
@@ -54,7 +61,7 @@
       <!-- Top Bar -->
       <header class="topbar">
         <div class="topbar__left">
-          <button @click="toggleSidebar" class="topbar__menu-btn">
+          <button @click="handleMenuClick" class="topbar__menu-btn">
             <Menu :size="20" />
           </button>
           <h1 class="topbar__title">{{ pageTitle }}</h1>
@@ -159,7 +166,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Leaf,
@@ -217,6 +224,7 @@ export default {
     const ws = useWebSocket();
 
     const sidebarCollapsed = ref(false);
+    const mobileMenuOpen = ref(false);
     const showNotifications = ref(false);
     const showUserMenu = ref(false);
     const userName = ref("Farmer John");
@@ -259,6 +267,18 @@ export default {
         "sidebarCollapsed",
         sidebarCollapsed.value.toString(),
       );
+    };
+
+    const closeMobileMenu = () => {
+      mobileMenuOpen.value = false;
+    };
+
+    const handleMenuClick = () => {
+      if (window.innerWidth <= 768) {
+        mobileMenuOpen.value = !mobileMenuOpen.value;
+      } else {
+        toggleSidebar();
+      }
     };
 
     const toggleNotifications = () => {
@@ -359,8 +379,16 @@ export default {
       ws.cleanup();
     });
 
+    // Auto-close mobile menu and dropdowns on route change
+    watch(() => route.fullPath, () => {
+      mobileMenuOpen.value = false;
+      showNotifications.value = false;
+      showUserMenu.value = false;
+    });
+
     return {
       sidebarCollapsed,
+      mobileMenuOpen,
       showNotifications,
       showUserMenu,
       userName,
@@ -370,6 +398,8 @@ export default {
       unreadCount,
       recentAlerts,
       toggleSidebar,
+      handleMenuClick,
+      closeMobileMenu,
       toggleNotifications,
       toggleUserMenu,
       closeAllDropdowns,
@@ -797,23 +827,52 @@ export default {
   z-index: 25;
 }
 
+/* Mobile sidebar backdrop */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 45;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sidebar {
     transform: translateX(-100%);
     width: 260px !important;
+    transition: transform 0.25s ease;
+    z-index: 50;
   }
 
   .sidebar--collapsed {
     transform: translateX(-100%);
+    width: 260px !important;
   }
 
-  .sidebar.open {
-    transform: translateX(0);
+  .sidebar--mobile-open {
+    transform: translateX(0) !important;
+  }
+
+  .sidebar--collapsed .logo-text,
+  .sidebar--collapsed .nav-item__label,
+  .sidebar--collapsed .nav-item__badge {
+    display: inline;
+  }
+
+  .sidebar-backdrop {
+    display: block;
   }
 
   .main {
     margin-left: 0 !important;
+    width: 100%;
   }
 
   .topbar__menu-btn {
@@ -828,10 +887,12 @@ export default {
     display: none;
   }
 
+  /* Keep dropdowns anchored to their button on mobile, not centered */
   .dropdown {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
+    right: 0;
+    left: auto;
+    transform: none;
+    min-width: 240px;
   }
 
   .content {
@@ -845,8 +906,22 @@ export default {
   }
 
   .dropdown {
+    right: 0;
+    left: auto;
+    transform: none;
     min-width: calc(100vw - 2rem);
     max-width: calc(100vw - 2rem);
+  }
+
+  .notifications-dropdown,
+  .user-dropdown {
+    position: fixed;
+    top: 64px;
+    right: 1rem;
+    left: 1rem;
+    width: auto;
+    min-width: 0;
+    max-width: none;
   }
 }
 </style>
