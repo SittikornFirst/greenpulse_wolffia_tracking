@@ -130,4 +130,51 @@ export default {
 .empty-state-action {
   margin-top: 0.5rem;
 }
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .empty-state {
+    padding: 2.5rem 1.25rem;
+    border-radius: 0.75rem;
+  }
+
+  .empty-state-icon {
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1rem;
+  }
+
+  .empty-state-title {
+    font-size: 1.125rem;
+  }
+
+  .empty-state-description {
+    font-size: 0.8125rem;
+    margin-bottom: 1.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .empty-state {
+    padding: 2rem 1rem;
+  }
+
+  .empty-state--compact {
+    padding: 1.5rem 0.75rem;
+  }
+
+  .empty-state-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .empty-state--compact .empty-state-icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .empty-state-title {
+    font-size: 1rem;
+  }
+}
 </style>

@@ -368,6 +368,8 @@ export default {
 @media (max-width: 768px) {
   .alert-item {
     flex-direction: column;
+    padding: 0.875rem;
+    gap: 0.75rem;
   }
 
   .alert-item__actions {
@@ -380,9 +382,30 @@ export default {
   }
 
   .alert-item__meta {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .alert-item__icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .alert-item__parameter,
+  .alert-item__description {
+    font-size: 0.8125rem;
+  }
+
+  .alert-item__meta {
+    font-size: 0.75rem;
+  }
+
+  .btn {
+    padding: 0.5rem;
+    font-size: 0.8125rem;
   }
 }
 </style>

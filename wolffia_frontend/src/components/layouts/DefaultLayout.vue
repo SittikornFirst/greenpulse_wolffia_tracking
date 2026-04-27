@@ -15,7 +15,7 @@
           <span v-if="!sidebarCollapsed" class="logo-text">Wolffia</span>
         </div>
         <button
-          @click="toggleSidebar"
+          @click="handleMenuClick"
           class="sidebar__toggle"
           :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
         >

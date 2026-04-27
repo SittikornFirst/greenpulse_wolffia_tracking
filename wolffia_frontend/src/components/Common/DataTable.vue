@@ -329,4 +329,78 @@ export default {
   font-size: 0.875rem;
   color: #6b7280;
 }
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .data-table-wrapper {
+    border-radius: 0.625rem;
+  }
+
+  .table-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 12px 14px;
+  }
+
+  .table-subtitle {
+    margin-left: 0;
+    font-size: 0.8rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 10px 12px;
+    font-size: 0.8125rem;
+  }
+
+  .data-table th {
+    font-size: 0.7rem;
+  }
+
+  .table-footer {
+    flex-direction: column;
+    gap: 0.625rem;
+    align-items: stretch;
+    padding: 12px 14px;
+  }
+
+  .pagination-info {
+    text-align: center;
+    font-size: 0.8rem;
+  }
+
+  .pagination-controls {
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+
+  .btn-pagination {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .data-table th,
+  .data-table td {
+    padding: 8px 10px;
+    font-size: 0.75rem;
+  }
+
+  .table-title {
+    font-size: 1rem;
+  }
+
+  .pagination-controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .page-indicator {
+    width: 100%;
+    text-align: center;
+    order: -1;
+  }
+}
 </style>

@@ -356,6 +356,8 @@ export default {
   border-radius: 0.75rem;
   padding: 1.5rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ---- Header ---- */
@@ -530,8 +532,45 @@ export default {
 .stat-value { font-size: 0.9375rem; font-weight: 600; color: #1f2937; }
 
 @media (max-width: 768px) {
-  .chart-card__header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
-  .chart-card__stats  { grid-template-columns: repeat(2, 1fr); }
-  .chart-container    { height: 185px; }
+  .chart-card { padding: 1rem; }
+  .chart-card__header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .chart-card__title { font-size: 0.95rem; }
+  .chart-card__stats  { grid-template-columns: repeat(2, 1fr); gap: 0.75rem; }
+  .chart-container    { height: 200px; }
+
+  /* Footer: optimal range + status badge stacked */
+  .chart-card__footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chart-card { padding: 0.875rem; border-radius: 0.625rem; }
+  .chart-card__header { gap: 0.4rem; margin-bottom: 0.875rem; }
+  .chart-card__title { font-size: 0.875rem; }
+  .current-range-label { font-size: 0.7rem; }
+  .range-menu-btn { width: 28px; height: 28px; }
+  .chart-container { height: 170px; }
+  .chart-card__stats { gap: 0.5rem; padding-top: 0.625rem; }
+  .stat-label { font-size: 0.625rem; }
+  .stat-value { font-size: 0.8125rem; }
+
+  /* Range dropdown: pin tighter so it doesn't overflow tiny screens */
+  .range-dropdown {
+    grid-template-columns: repeat(3, 1fr);
+    min-width: 140px;
+    max-width: calc(100vw - 2rem);
+  }
+  .range-opt { padding: 5px 6px; font-size: 0.75rem; }
+
+  .status-badge { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
 }
 </style>

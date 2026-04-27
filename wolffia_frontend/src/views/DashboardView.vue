@@ -1153,16 +1153,29 @@ export default {
   .dashboard__header {
     flex-direction: column;
     gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .dashboard__title h1 {
+    font-size: 1.5rem;
   }
 
   .dashboard__actions {
     width: 100%;
     flex-direction: column;
     align-items: stretch;
+    gap: 0.75rem;
   }
 
-  .farm-selector select {
+  .farm-selector,
+  .device-filter {
     width: 100%;
+  }
+
+  .farm-selector select,
+  .device-select {
+    width: 100%;
+    min-width: 0;
   }
 
   .btn {
@@ -1170,8 +1183,69 @@ export default {
     justify-content: center;
   }
 
+  /* Metric cards: 2 per row on phones */
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
   .charts-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .recent-alerts {
+    padding: 1rem;
+  }
+
+  .section-header h2 {
+    font-size: 1.25rem;
+  }
+}
+
+/* ===== Tiny phones (≤480px) ===== */
+@media (max-width: 480px) {
+  .dashboard {
+    padding: 0.75rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .dashboard__title h1 {
+    font-size: 1.25rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .stat-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .activity-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.4rem;
+  }
+
+  .activity-desc {
+    margin: 0;
+  }
+
+  .activity-time {
+    min-width: 0;
   }
 }
 

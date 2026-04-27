@@ -182,6 +182,8 @@ export default {
     box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
     border-left: 4px solid;
     transition: all 0.3s ease;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .metric-card--normal {
@@ -245,6 +247,15 @@ export default {
 .metric-card__info {
     display: flex;
     flex-direction: column;
+    min-width: 0;
+    flex: 1;
+}
+
+.metric-card__minmax {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-top: 0.25rem;
+    word-break: break-word;
 }
 
 .metric-card__title {
@@ -328,6 +339,67 @@ export default {
 
     .metric-card__icon {
         padding: 0.5rem;
+    }
+}
+
+/* On phones, stack icon ABOVE info so 2 cards per row never overflow */
+@media (max-width: 480px) {
+    .metric-card {
+        padding: 0.875rem;
+    }
+
+    .metric-card__content {
+        margin-bottom: 0.625rem;
+    }
+
+    .metric-card__icon-wrapper {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .metric-card__icon {
+        padding: 0.4rem;
+    }
+
+    .metric-card__title {
+        font-size: 0.75rem;
+        line-height: 1.2;
+    }
+
+    .metric-card__value {
+        font-size: 1.25rem;
+        word-break: break-word;
+    }
+
+    .metric-card__unit {
+        font-size: 0.75rem;
+    }
+
+    .metric-card__minmax {
+        font-size: 0.65rem;
+        line-height: 1.3;
+    }
+
+    .metric-card__range {
+        font-size: 0.75rem;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        padding-top: 0.5rem;
+    }
+
+    .metric-card__range-value {
+        font-size: 0.7rem;
+    }
+
+    .metric-card__last-update {
+        font-size: 0.65rem;
+    }
+
+    .metric-card__footer {
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
     }
 }
 </style>

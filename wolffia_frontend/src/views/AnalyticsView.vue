@@ -1503,10 +1503,129 @@ export default {
     align-items: flex-start;
   }
 
+  .device-selector,
+  .entries-selector {
+    width: 100%;
+  }
+
   .refresh-btn {
     width: 100%;
     margin-left: 0;
     margin-top: 1rem;
+  }
+}
+
+/* ===== Mobile (≤768px) ===== */
+@media (max-width: 768px) {
+  .analytics-view {
+    padding: 1rem;
+  }
+
+  .analytics-header {
+    margin-bottom: 1.5rem;
+    gap: 1rem;
+  }
+
+  .analytics-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .subtitle {
+    font-size: 0.875rem;
+  }
+
+  /* Metric cards: tighter min-width so 2 columns fit on a phone */
+  .metrics-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Recommendations and correlations stack to single column */
+  .recommendations-panel,
+  .correlation-panel {
+    padding: 1.25rem 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .recommendations-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .correlation-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .recommendations-header,
+  .correlation-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+  }
+
+  .rec-subtitle,
+  .corr-subtitle {
+    font-size: 0.75rem;
+  }
+
+  /* Pagination — stack info on top, buttons below */
+  .pagination-bar {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .pagination-controls {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .pagination-info {
+    text-align: center;
+  }
+}
+
+/* ===== Tiny phones (≤480px) ===== */
+@media (max-width: 480px) {
+  .analytics-view {
+    padding: 0.75rem;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+  }
+
+  .analytics-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .recommendation-card {
+    padding: 0.875rem 1rem;
+    gap: 0.75rem;
+  }
+
+  .corr-card {
+    padding: 0.875rem 1rem;
+  }
+
+  .corr-value {
+    font-size: 1.25rem;
+  }
+
+  .page-number {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.8rem;
+  }
+
+  .page-nav {
+    padding: 0.4rem 0.7rem;
+    font-size: 0.8rem;
   }
 }
 </style>
