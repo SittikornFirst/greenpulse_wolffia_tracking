@@ -8,8 +8,11 @@ export const useAlertsStore = defineStore("alerts", () => {
   const alerts = ref([]);
   const loading = ref(false);
   const error = ref(null);
-  const toastAlerts = ref([]); // Queue of alerts to show as toast
-  const currentToast = ref(null); // Currently displayed toast
+  // Stack of currently-visible toasts. Each entry is the alert plus a unique
+  // _toastId so TransitionGroup can key them safely even if the same _id
+  // somehow gets re-toasted (e.g., reconnection storms).
+  const activeToasts = ref([]);
+  const MAX_VISIBLE_TOASTS = 3;
 
   // Getters — backend uses `status: 'resolved'` not a boolean `resolved`
   const unresolvedAlerts = computed(() =>
@@ -143,33 +146,33 @@ export const useAlertsStore = defineStore("alerts", () => {
   }
 
   function addAlert(alert) {
-    // Add alert from WebSocket or other source
-    const exists = alerts.value.find(
-      (a) => (a._id || a.id) === (alert._id || alert.id),
-    );
+    // Mirror into the master alerts list (skip dup _ids so we don't double-list)
+    const alertId = alert?._id || alert?.id;
+    const exists = alertId
+      ? alerts.value.find((a) => (a._id || a.id) === alertId)
+      : null;
     if (!exists) {
       alerts.value.unshift(alert);
-      // Add to toast queue
-      toastAlerts.value.push(alert);
-      // Show immediately if no current toast
-      if (!currentToast.value) {
-        showNextToast();
-      }
+    }
+
+    // Always toast — the alerts list dedup must NOT block the popup, otherwise
+    // a fetchAlerts that races a WebSocket broadcast silently swallows the toast.
+    pushToast(alert);
+  }
+
+  function pushToast(alert) {
+    const toastId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    activeToasts.value.push({ ...alert, _toastId: toastId });
+    // Cap stack size — drop the oldest visible toast if we exceed the cap
+    while (activeToasts.value.length > MAX_VISIBLE_TOASTS) {
+      activeToasts.value.shift();
     }
   }
 
-  function showNextToast() {
-    if (toastAlerts.value.length > 0) {
-      currentToast.value = toastAlerts.value[0];
-    }
-  }
-
-  function dismissToast() {
-    toastAlerts.value.shift();
-    currentToast.value = null;
-    setTimeout(() => {
-      showNextToast();
-    }, 300);
+  function dismissToast(toastId) {
+    activeToasts.value = activeToasts.value.filter(
+      (t) => t._toastId !== toastId,
+    );
   }
 
   function updateLocalAlert(alertId, updates) {
@@ -222,8 +225,7 @@ export const useAlertsStore = defineStore("alerts", () => {
     alerts.value = [];
     loading.value = false;
     error.value = null;
-    toastAlerts.value = [];
-    currentToast.value = null;
+    activeToasts.value = [];
   }
 
   return {
@@ -231,8 +233,7 @@ export const useAlertsStore = defineStore("alerts", () => {
     alerts,
     loading,
     error,
-    toastAlerts,
-    currentToast,
+    activeToasts,
 
     // Getters
     unresolvedAlerts,
@@ -250,7 +251,7 @@ export const useAlertsStore = defineStore("alerts", () => {
     deleteAlert,
     addAlert,
     updateLocalAlert,
-    showNextToast,
+    pushToast,
     dismissToast,
     clearResolvedAlerts,
     clearError,

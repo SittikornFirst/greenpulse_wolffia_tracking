@@ -1,12 +1,14 @@
 <template>
   <div id="app" :class="{ 'theme-dark': darkMode }">
-    <!-- Alert Toast Notification -->
-    <AlertToast
-      v-if="alertsStore.currentToast"
-      :alert="alertsStore.currentToast"
-      :show="true"
-      @close="alertsStore.dismissToast"
-    />
+    <!-- Alert Toast Stack -->
+    <TransitionGroup tag="div" name="toast" class="toast-stack">
+      <AlertToast
+        v-for="toast in alertsStore.activeToasts"
+        :key="toast._toastId"
+        :alert="toast"
+        @close="alertsStore.dismissToast(toast._toastId)"
+      />
+    </TransitionGroup>
 
     <!-- Global Loading Overlay -->
     <GlobalLoader />
@@ -145,6 +147,43 @@ body {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Toast stack — top-right, stacks downward, above sidebar/dropdowns */
+.toast-stack {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  pointer-events: none;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.28s ease;
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+.toast-leave-active {
+  position: absolute;
+  right: 0;
+}
+
+@media (max-width: 600px) {
+  .toast-stack {
+    top: 12px;
+    right: 12px;
+    left: 12px;
+  }
 }
 
 /* Scrollbar */

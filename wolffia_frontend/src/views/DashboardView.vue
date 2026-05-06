@@ -237,7 +237,7 @@
             chart-type="area"
             :color="chartColors.ph"
             :optimal-range="chartRanges.ph"
-            :loading="loading"
+            :loading="loading || chartLoading.ph"
             @range-change="(r) => handleChartRangeChange('ph', r)"
           />
 
@@ -247,7 +247,7 @@
             chart-type="line"
             :color="chartColors.temperature"
             :optimal-range="chartRanges.temperature"
-            :loading="loading"
+            :loading="loading || chartLoading.temperature"
             @range-change="(r) => handleChartRangeChange('temperature', r)"
           />
         </div>
@@ -259,7 +259,7 @@
             chart-type="area"
             :color="chartColors.light"
             :optimal-range="chartRanges.light"
-            :loading="loading"
+            :loading="loading || chartLoading.light"
             @range-change="(r) => handleChartRangeChange('light', r)"
           />
 
@@ -269,7 +269,7 @@
             chart-type="line"
             :color="chartColors.ec"
             :optimal-range="chartRanges.ec"
-            :loading="loading"
+            :loading="loading || chartLoading.ec"
             @range-change="(r) => handleChartRangeChange('ec', r)"
           />
 
@@ -279,7 +279,7 @@
             chart-type="line"
             :color="chartColors.tds"
             :optimal-range="chartRanges.tds"
-            :loading="loading"
+            :loading="loading || chartLoading.tds"
             @range-change="(r) => handleChartRangeChange('tds', r)"
           />
 
@@ -289,7 +289,7 @@
             chart-type="line"
             :color="chartColors.humidity"
             :optimal-range="chartRanges.humidity"
-            :loading="loading"
+            :loading="loading || chartLoading.humidity"
             @range-change="(r) => handleChartRangeChange('humidity', r)"
           />
         </div>
@@ -377,6 +377,16 @@ export default {
       ec: "1h",
       tds: "1h",
       humidity: "1h",
+    });
+    // Per-chart loading state — flips during a range switch fetch so we don't
+    // spin all six charts when only one is being refetched.
+    const chartLoading = ref({
+      ph: false,
+      temperature: false,
+      light: false,
+      ec: false,
+      tds: false,
+      humidity: false,
     });
     const selectedDeviceId = ref("all");
     const authStore = useAuthStore();
@@ -768,6 +778,7 @@ export default {
       chartTimeRanges.value[metricKey] = range;
       const devicesToFetch = activeDevices.value;
       if (devicesToFetch.length === 0) return;
+      chartLoading.value[metricKey] = true;
       try {
         await Promise.all(
           devicesToFetch.map((device) =>
@@ -776,6 +787,8 @@ export default {
         );
       } catch (error) {
         console.error("Error fetching historical data:", error);
+      } finally {
+        chartLoading.value[metricKey] = false;
       }
     };
 
@@ -893,6 +906,7 @@ export default {
       loading,
       realtimeConnected,
       chartTimeRanges,
+      chartLoading,
       selectedDeviceId,
       userDevices,
       activeDevices,

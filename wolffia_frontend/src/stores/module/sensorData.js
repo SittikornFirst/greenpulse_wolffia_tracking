@@ -248,14 +248,20 @@ export const useSensorDataStore = defineStore("sensorData", () => {
       ...reading,
       timestamp: reading.timestamp || new Date().toISOString(),
     });
-    latestReadings.value[normalized.deviceId] = normalized;
+    const deviceId = normalized.deviceId || reading.device_id;
+    latestReadings.value[deviceId] = normalized;
 
-    const key = `${reading.deviceId}_24h`;
-    if (historicalData.value[key]) {
-      historicalData.value[key].push(reading);
+    // Push to ALL cached time-range keys for this device (not just _24h)
+    const prefix = `${deviceId}_`;
+    for (const key of Object.keys(historicalData.value)) {
+      if (key.startsWith(prefix)) {
+        historicalData.value[key].push(normalized);
 
-      if (historicalData.value[key].length > 100) {
-        historicalData.value[key].shift();
+        // Keep a reasonable buffer size per range
+        const maxLen = key.endsWith("_1h") ? 120 : 500;
+        if (historicalData.value[key].length > maxLen) {
+          historicalData.value[key].shift();
+        }
       }
     }
   }

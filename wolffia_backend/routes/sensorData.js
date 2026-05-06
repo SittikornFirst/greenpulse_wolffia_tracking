@@ -363,77 +363,132 @@ router.get("/:deviceId/latest", async (req, res) => {
   }
 });
 
-// Get historical data
+// Get historical data — server-side time-bucketed for chart-friendly output.
+// Returns ~TARGET_POINTS evenly-spaced buckets averaging each sensor metric
+// across the requested window so 5d/7d/30d/all charts render the full span
+// rather than a 500-row tail near "now".
+const HISTORY_RANGE_MS = {
+  "1h":  60 * 60 * 1000,
+  "4h":  4 * 60 * 60 * 1000,
+  "12h": 12 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "5d":  5 * 24 * 60 * 60 * 1000,
+  "7d":  7 * 24 * 60 * 60 * 1000,
+  "15d": 15 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
+  "1y":  365 * 24 * 60 * 60 * 1000,
+};
+const HISTORY_TARGET_POINTS = 60;
+const MIN_BUCKET_MS = 60 * 1000; // 1-minute floor
+
 router.get("/:deviceId/history", async (req, res) => {
   try {
-    const { range, startDate, endDate, limit = 100 } = req.query;
+    const { range, startDate, endDate } = req.query;
     const deviceIdParam = req.params.deviceId.toUpperCase();
-    const deviceQuery = {
-      $or: [{ device_id: deviceIdParam }]
-    };
+    const deviceQuery = { $or: [{ device_id: deviceIdParam }] };
     if (mongoose.Types.ObjectId.isValid(deviceIdParam)) {
       deviceQuery.$or.push({ _id: deviceIdParam });
     }
-    
     if (req.user.role !== "admin") {
       deviceQuery.user_id = req.user._id;
     }
     const device = await Device.findOne(deviceQuery);
 
     if (!device) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Device not found" });
+      return res.status(404).json({ success: false, message: "Device not found" });
     }
 
-    let startTime;
-    if (range && range !== "all") {
-      const now = new Date();
-      const ranges = {
-        "1h":  60 * 60 * 1000,
-        "4h":  4 * 60 * 60 * 1000,
-        "12h": 12 * 60 * 60 * 1000,
-        "24h": 24 * 60 * 60 * 1000,
-        "5d":  5 * 24 * 60 * 60 * 1000,
-        "7d":  7 * 24 * 60 * 60 * 1000,
-        "15d": 15 * 24 * 60 * 60 * 1000,
-        "30d": 30 * 24 * 60 * 60 * 1000,
-        "1y":  365 * 24 * 60 * 60 * 1000,
-      };
-      if (ranges[range]) {
-        startTime = new Date(now - ranges[range]);
+    const baseQuery = { device_id: device.device_id };
+    let bucketMs = null;
+    let spanMs = null;
+
+    if (range && range !== "all" && HISTORY_RANGE_MS[range]) {
+      spanMs = HISTORY_RANGE_MS[range];
+      baseQuery.created_at = { $gte: new Date(Date.now() - spanMs) };
+      if (endDate) baseQuery.created_at.$lte = new Date(endDate);
+    } else if (range === "all") {
+      // Span = (oldest reading) → now, so the chart covers the whole device history.
+      const [bounds] = await SensorData.aggregate([
+        { $match: { device_id: device.device_id } },
+        { $group: { _id: null, min: { $min: "$created_at" }, max: { $max: "$created_at" } } },
+      ]);
+      if (bounds?.min && bounds?.max) {
+        spanMs = new Date(bounds.max).getTime() - new Date(bounds.min).getTime();
       }
     } else if (startDate) {
-      startTime = new Date(startDate);
+      const startMs = new Date(startDate).getTime();
+      const endMs = endDate ? new Date(endDate).getTime() : Date.now();
+      baseQuery.created_at = { $gte: new Date(startMs) };
+      if (endDate) baseQuery.created_at.$lte = new Date(endMs);
+      spanMs = endMs - startMs;
     }
 
-    const query = { device_id: device.device_id };
-    if (startTime) query.created_at = { $gte: startTime };
-    if (endDate) {
-      query.created_at = { ...query.created_at, $lte: new Date(endDate) };
+    if (spanMs && spanMs > 0) {
+      bucketMs = Math.max(MIN_BUCKET_MS, Math.ceil(spanMs / HISTORY_TARGET_POINTS));
     }
 
-    const pageNum = parseInt(req.query.page) || 1;
-    const limitNum = parseInt(req.query.limit) || 100;
-    const skip = (pageNum - 1) * limitNum;
-
-    const [total, data] = await Promise.all([
-      SensorData.countDocuments(query),
-      SensorData.find(query)
+    // No range info → fall back to a small recent slice so non-chart callers
+    // still get something sensible.
+    if (!bucketMs) {
+      const limitNum = parseInt(req.query.limit) || 100;
+      const data = await SensorData.find(baseQuery)
         .sort({ created_at: -1 })
-        .skip(skip)
-        .limit(limitNum)
+        .limit(limitNum);
+      return res.json({
+        success: true,
+        data: data.map((doc) => attachVirtualMetrics(doc.toObject({ virtuals: true }))),
+        pagination: { total: data.length, page: 1, limit: limitNum, pages: 1 },
+      });
+    }
+
+    const halfBucket = Math.floor(bucketMs / 2);
+    const buckets = await SensorData.aggregate([
+      { $match: baseQuery },
+      {
+        $group: {
+          _id: {
+            $subtract: [
+              { $toLong: "$created_at" },
+              { $mod: [{ $toLong: "$created_at" }, bucketMs] },
+            ],
+          },
+          ph_value: { $avg: "$ph_value" },
+          ec_value: { $avg: "$ec_value" },
+          tds_value: { $avg: "$tds_value" },
+          water_temperature_c: { $avg: "$water_temperature_c" },
+          air_temperature_c: { $avg: "$air_temperature_c" },
+          air_humidity: { $avg: "$air_humidity" },
+          light_intensity: { $avg: "$light_intensity" },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          _id: 0,
+          // Place point at bucket midpoint so it visually sits where the
+          // averaged data actually lives.
+          created_at: { $toDate: { $add: ["$_id", halfBucket] } },
+          timestamp: { $toDate: { $add: ["$_id", halfBucket] } },
+          ph_value: 1,
+          ec_value: 1,
+          tds_value: 1,
+          water_temperature_c: 1,
+          air_temperature_c: 1,
+          air_humidity: 1,
+          light_intensity: 1,
+          count: 1,
+        },
+      },
     ]);
+
+    const mapped = buckets.map(attachVirtualMetrics);
 
     res.json({
       success: true,
-      data: data.map((doc) => attachVirtualMetrics(doc.toObject({ virtuals: true }))),
-      pagination: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        pages: Math.max(1, Math.ceil(total / limitNum))
-      }
+      data: mapped,
+      pagination: { total: mapped.length, page: 1, limit: mapped.length, pages: 1 },
+      meta: { range: range || null, bucketMs, points: mapped.length, spanMs },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

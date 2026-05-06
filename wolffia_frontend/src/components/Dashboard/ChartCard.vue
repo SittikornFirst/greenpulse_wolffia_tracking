@@ -27,7 +27,7 @@
       </div>
     </div>
 
-    <div v-if="loading || rangeLoading" class="chart-card__loading">
+    <div v-if="isLoading && !hasData" class="chart-card__loading">
       <div class="spinner"></div>
       <p>Loading data...</p>
     </div>
@@ -40,6 +40,11 @@
     <div v-else class="chart-card__content">
       <div class="chart-container">
         <canvas ref="chartCanvas"></canvas>
+        <Transition name="fade">
+          <div v-if="isLoading" class="chart-loading-overlay">
+            <div class="spinner spinner--small"></div>
+          </div>
+        </Transition>
       </div>
 
       <div v-if="optimalRange" class="chart-card__footer">
@@ -88,18 +93,38 @@ import {
 import { Chart, registerables } from "chart.js";
 Chart.register(...registerables);
 
-// Downsampling config: bucketMs = null means raw data
-const GROUPING = {
-  "1h":  { bucketMs: null },
-  "4h":  { bucketMs: 15 * 60 * 1000 },   // 15-min buckets
-  "12h": { bucketMs: 30 * 60 * 1000 },   // 30-min buckets
-  "24h": { bucketMs: 60 * 60 * 1000 },   // 1-hr buckets
-  "5d":  { bucketMs: 4 * 60 * 60 * 1000 },  // 4-hr buckets
-  "7d":  { bucketMs: 6 * 60 * 60 * 1000 },  // 6-hr buckets
-  "15d": { bucketMs: 12 * 60 * 60 * 1000 }, // 12-hr buckets
-  "30d": { bucketMs: 24 * 60 * 60 * 1000 }, // 1-day buckets
-  "all": { bucketMs: 24 * 60 * 60 * 1000 }, // 1-day buckets
+// Target ~60 points per range so every chart has consistent visual density.
+// 1h → 1-min buckets (60 pts), 4h → 4-min (60 pts), 24h → 24-min (60 pts), etc.
+const TARGET_POINTS = 60;
+const RANGE_MS = {
+  "1h":  60 * 60 * 1000,
+  "4h":  4 * 60 * 60 * 1000,
+  "12h": 12 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "5d":  5 * 24 * 60 * 60 * 1000,
+  "7d":  7 * 24 * 60 * 60 * 1000,
+  "15d": 15 * 24 * 60 * 60 * 1000,
+  "30d": 30 * 24 * 60 * 60 * 1000,
 };
+
+// Compute bucket size in ms for a given range. For "all", derive from data span.
+function bucketSizeFor(range, data) {
+  if (range === "all") {
+    if (!data || data.length < 2) return null;
+    let min = Infinity, max = -Infinity;
+    for (const pt of data) {
+      const t = +new Date(pt.x);
+      if (isNaN(t)) continue;
+      if (t < min) min = t;
+      if (t > max) max = t;
+    }
+    const span = max - min;
+    if (!isFinite(span) || span <= 0) return null;
+    return Math.max(60_000, Math.ceil(span / TARGET_POINTS)); // min 1-min buckets
+  }
+  const span = RANGE_MS[range];
+  return span ? Math.ceil(span / TARGET_POINTS) : null;
+}
 
 const TIME_RANGES = [
   { label: "1H",    value: "1h"  },
@@ -127,6 +152,7 @@ const RANGE_LABELS = {
 
 /**
  * Group data points into time buckets and average their Y values.
+ * Uses median instead of mean to reduce spike impact.
  */
 function downsample(data, bucketMs) {
   if (!bucketMs || !data || data.length === 0) return data;
@@ -143,10 +169,18 @@ function downsample(data, bucketMs) {
   }
 
   return Array.from(buckets.entries())
-    .map(([ts, vals]) => ({
-      x: new Date(ts).toISOString(),
-      y: vals.reduce((s, v) => s + v, 0) / vals.length,
-    }))
+    .map(([ts, vals]) => {
+      // Use median for downsampled buckets to reduce spike impact
+      const sorted = [...vals].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 !== 0
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+      return {
+        x: new Date(ts + bucketMs / 2).toISOString(), // Use bucket midpoint for better alignment
+        y: median,
+      };
+    })
     .sort((a, b) => new Date(a.x) - new Date(b.x));
 }
 
@@ -171,7 +205,9 @@ export default {
     const selectedRange = ref("1h");
     const menuOpen      = ref(false);
     const rangeControlRef = ref(null);
-    const rangeLoading  = ref(false);
+    // Brief local "switching" flag so we show the overlay immediately on click,
+    // before the parent's fetch promise has a chance to flip props.loading.
+    const switching     = ref(false);
 
     const timeRanges = TIME_RANGES;
 
@@ -192,16 +228,17 @@ export default {
       if (chartInstance.value) chartInstance.value.destroy();
     });
 
-    // Downsampled display data
+    // Downsampled display data — targets ~60 points per range
     const displayData = computed(() => {
       const raw = props.data || [];
-      const cfg = GROUPING[selectedRange.value] || { bucketMs: null };
-      const sampled = downsample(raw, cfg.bucketMs);
-      // Sort oldest→newest for chart
+      const bucketMs = bucketSizeFor(selectedRange.value, raw);
+      const sampled = downsample(raw, bucketMs);
       return [...sampled].sort((a, b) => new Date(a.x) - new Date(b.x));
     });
 
     const hasData = computed(() => displayData.value.length > 0);
+    // Effective loading: parent's per-chart loading OR our local switching flag
+    const isLoading = computed(() => props.loading || switching.value);
 
     const statistics = computed(() => {
       if (!hasData.value) return { min: 0, max: 0, avg: 0, count: 0 };
@@ -248,21 +285,76 @@ export default {
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     };
 
+    /**
+     * Compute Y-axis min/max that includes the optimal range band
+     * and adds some padding, preventing wild auto-scaling from spikes.
+     */
+    const computeYBounds = (values) => {
+      if (!values.length) return { suggestedMin: undefined, suggestedMax: undefined };
+
+      const dataMin = Math.min(...values);
+      const dataMax = Math.max(...values);
+
+      let rangeMin = dataMin;
+      let rangeMax = dataMax;
+
+      // Include optimal range bounds if provided
+      if (props.optimalRange) {
+        rangeMin = Math.min(rangeMin, props.optimalRange.min);
+        rangeMax = Math.max(rangeMax, props.optimalRange.max);
+      }
+
+      // Add 10% padding
+      const span = rangeMax - rangeMin || 1;
+      return {
+        suggestedMin: Math.floor((rangeMin - span * 0.1) * 100) / 100,
+        suggestedMax: Math.ceil((rangeMax + span * 0.1) * 100) / 100,
+      };
+    };
+
+    /**
+     * Build the optimal range band plugin data.
+     * This draws a semi-transparent green rectangle behind the chart
+     * showing the safe zone.
+     */
+    const optimalRangeBandPlugin = {
+      id: 'optimalRangeBand',
+      beforeDraw(chart) {
+        const optRange = chart.options.plugins.optimalRangeBand;
+        if (!optRange || optRange.min == null || optRange.max == null) return;
+
+        const { ctx, chartArea: { left, right }, scales: { y } } = chart;
+        const top = y.getPixelForValue(optRange.max);
+        const bottom = y.getPixelForValue(optRange.min);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.08)'; // light green
+        ctx.fillRect(left, top, right - left, bottom - top);
+
+        // Draw dashed border lines at min/max
+        ctx.strokeStyle = 'rgba(16, 185, 129, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(left, top);
+        ctx.lineTo(right, top);
+        ctx.moveTo(left, bottom);
+        ctx.lineTo(right, bottom);
+        ctx.stroke();
+        ctx.restore();
+      }
+    };
+
     const createChart = async () => {
       await nextTick();
       const canvas = chartCanvas.value;
       if (!canvas || !hasData.value) return;
 
-      if (chartInstance.value) {
-        chartInstance.value.destroy();
-        chartInstance.value = null;
-      }
-
-      const ctx = canvas.getContext("2d");
       const labels = displayData.value.map((d) => formatLabel(d.x));
       const values = displayData.value.map((d) => d.y);
+      const yBounds = computeYBounds(values);
 
-      chartInstance.value = new Chart(ctx, {
+      const chartConfig = {
         type: props.chartType === "area" ? "line" : props.chartType,
         data: {
           labels,
@@ -272,8 +364,8 @@ export default {
             borderColor: props.color,
             backgroundColor: props.chartType === "area" ? hexToRgba(props.color, 0.15) : props.color,
             fill: props.chartType === "area",
-            tension: 0.4,
-            pointRadius: displayData.value.length > 60 ? 0 : 2,
+            tension: 0.35,
+            pointRadius: displayData.value.length > 80 ? 0 : displayData.value.length > 40 ? 1 : 2,
             pointHoverRadius: 5,
             borderWidth: 2,
           }],
@@ -281,6 +373,7 @@ export default {
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: { duration: 400 },
           interaction: { mode: "index", intersect: false },
           plugins: {
             legend: { display: false },
@@ -288,17 +381,34 @@ export default {
               backgroundColor: "rgba(0,0,0,0.85)",
               padding: 12,
               callbacks: {
+                title: (items) => {
+                  // Show the full timestamp in tooltip
+                  const idx = items[0]?.dataIndex;
+                  if (idx != null && displayData.value[idx]) {
+                    const d = new Date(displayData.value[idx].x);
+                    return d.toLocaleString("en-US", {
+                      month: "short", day: "numeric",
+                      hour: "2-digit", minute: "2-digit", second: "2-digit"
+                    });
+                  }
+                  return items[0]?.label;
+                },
                 label: (ctx) => `${ctx.parsed.y.toFixed(props.decimals)} ${props.unit}`,
               },
             },
+            optimalRangeBand: props.optimalRange
+              ? { min: props.optimalRange.min, max: props.optimalRange.max }
+              : null,
           },
           scales: {
             x: {
-              grid: { color: "rgba(0,0,0,0.05)" },
+              grid: { color: "rgba(0,0,0,0.04)" },
               ticks: { maxTicksLimit: 7, font: { size: 11 }, maxRotation: 40, minRotation: 0 },
             },
             y: {
-              grid: { color: "rgba(0,0,0,0.05)" },
+              grid: { color: "rgba(0,0,0,0.04)" },
+              suggestedMin: yBounds.suggestedMin,
+              suggestedMax: yBounds.suggestedMax,
               ticks: {
                 font: { size: 11 },
                 callback: (v) => v.toFixed(props.decimals),
@@ -306,23 +416,50 @@ export default {
             },
           },
         },
-      });
+        plugins: [optimalRangeBandPlugin],
+      };
+
+      // If chart exists AND is still bound to the current canvas DOM node,
+      // update in-place. Otherwise the canvas was unmounted/remounted and
+      // the old instance points to a dead node — destroy and recreate.
+      if (chartInstance.value && chartInstance.value.canvas === canvas) {
+        const chart = chartInstance.value;
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = values;
+        chart.data.datasets[0].pointRadius = displayData.value.length > 80 ? 0 : displayData.value.length > 40 ? 1 : 2;
+        chart.options.scales.y.suggestedMin = yBounds.suggestedMin;
+        chart.options.scales.y.suggestedMax = yBounds.suggestedMax;
+        chart.options.plugins.optimalRangeBand = chartConfig.options.plugins.optimalRangeBand;
+        chart.update("none"); // skip animation on data-only updates → snappier
+        return;
+      }
+
+      if (chartInstance.value) {
+        chartInstance.value.destroy();
+        chartInstance.value = null;
+      }
+      chartInstance.value = new Chart(canvas.getContext("2d"), chartConfig);
     };
 
     const selectTimeRange = (range) => {
+      if (range === selectedRange.value) {
+        menuOpen.value = false;
+        return;
+      }
       selectedRange.value = range;
       menuOpen.value = false;
-      rangeLoading.value = true;
+      switching.value = true; // overlay shows immediately
       emit("range-change", range);
     };
 
-    // Rebuild chart when display data changes; also clears per-range loading
+    // Rebuild chart whenever display data changes (data fetched, range bucketed, etc.)
     watch(displayData, () => {
-      rangeLoading.value = false;
-      if (hasData.value && !props.loading) createChart();
+      if (hasData.value) createChart();
     }, { deep: true });
 
+    // Clear local switching flag once parent finishes its fetch
     watch(() => props.loading, (loading) => {
+      if (!loading) switching.value = false;
       if (!loading && hasData.value) createChart();
     });
 
@@ -335,7 +472,7 @@ export default {
       rangeControlRef,
       selectedRange,
       menuOpen,
-      rangeLoading,
+      isLoading,
       timeRanges,
       currentRangeLabel,
       hasData,
@@ -495,6 +632,30 @@ export default {
   height: 240px;
   position: relative;
 }
+
+.chart-loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: 0.375rem;
+  z-index: 5;
+}
+
+.spinner--small {
+  width: 28px;
+  height: 28px;
+  border-width: 3px;
+}
+
+.fade-enter-active,
+.fade-leave-active { transition: opacity 0.18s ease; }
+.fade-enter-from,
+.fade-leave-to { opacity: 0; }
 
 /* ---- Footer ---- */
 .chart-card__footer {
