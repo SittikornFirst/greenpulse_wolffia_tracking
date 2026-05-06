@@ -344,10 +344,12 @@ The frontend `normalizeReading()` in `sensorData.js` store applies the same heur
 
 The firmware runs on the ESP32 using the Arduino framework:
 
-- Reads sensors over I2C / ADC at an interval fetched from `GET /api/devices/:id/config` on boot (default 30 s)
-- On boot, fetches full device configuration (thresholds, sampling interval, relay states, schedules) from the public `/config` endpoint
-- Connects to WiFi using credentials stored in flash
-- POSTs JSON sensor readings to `POST /api/sensor-data` (public — no JWT required)
+- Reads sensors over I2C / ADC at a hardcoded interval (default 60 s).
+- Connects to WiFi using hardcoded credentials.
+- Synchronizes time using NTP (`pool.ntp.org`) with a DS1302 RTC fallback to ensure accurate ISO 8601 timestamps.
+- POSTs JSON sensor readings directly to `POST /api/sensor-data` (public — no JWT required).
+- Features simplified single-threaded execution (no FreeRTOS or local web server) for maximum stability.
+- Relay control and remote configuration sync have been removed in the current V2 firmware.
 
 Payload fields:
 ```json
@@ -391,8 +393,6 @@ The physical system is built around the ESP32 microcontroller, utilizing a 38-pi
 *   **Time & Storage:**
     *   **RTC Module:** A DS1302 Real-Time Clock uses a three-wire SPI connection (CLK=14, DAT=27, RST=26) to maintain accurate timestamps.
     *   **SD Card Module:** Connected via SPI (CS=21) for local data logging.
-*   **Control Mechanisms:**
-    *   **Relay Module:** A 2-channel active-LOW 5V relay module is connected to GPIO 25 for the Air Pump and GPIO 32 for the Grow Light to control external environmental adjustments.
 
 (Insert Hardware Wiring/Enclosure Photo here)
 
@@ -400,15 +400,14 @@ The physical system is built around the ESP32 microcontroller, utilizing a 38-pi
 
 (Insert Embedded Software Task Flowchart here)
 
-The embedded software is developed using the Arduino framework targeting the ESP32 and utilizes FreeRTOS for concurrent dual-core task execution. Shared resources are strictly protected using four semaphores (`sensorMutex`, `phTDSScheduleMutex`, `sdMutex`, and `dataLogMutex`).
+The embedded software is developed using the Arduino framework targeting the ESP32. To maximize stability and prevent memory leaks, Version 2 utilizes a simplified, single-threaded architecture using non-blocking `millis()` checks instead of FreeRTOS tasks.
 
-*   **Task Layout:** The logic separates network I/O from critical time schedules. The `sensorTask` (Core 1, Priority 1) handles sensor reads, HTTP POSTs, and relay syncs. The `phTDSScheduleTask` (Core 1, Priority 2) manages time-based schedule enforcement.
 *   **Initialization & Time Sync:** Upon startup, the system initializes I²C and 1-Wire sensors, analog pins, the DS1302 RTC, SD card, and Wi-Fi. It synchronizes time via NTP from `pool.ntp.org`, which re-syncs every 24 hours and automatically falls back to the RTC if the network drops.
-*   **Data Acquisition Pipeline:** The system routinely reads all sensors every 60 seconds. It applies a 40-sample median filter to ADC readings for pH and EC to reject impulse noise, which is common with water reflections in Wolffia ponds. It also applies temperature compensation formulas for EC/TDS.
+*   **Data Acquisition Pipeline:** The system routinely reads all sensors every 60 seconds. It applies a 10-sample median filter (bubble sort) to ADC readings for pH and TDS to reject impulse noise. It also applies temperature compensation formulas for TDS.
 *   **Data Transmission & Failover:** Data is formatted into an ISO-timestamped JSON payload and sent via HTTP POST to the backend API.
     *   If Wi-Fi drops or the API fails, the system appends the payload to an SD card backup file named `/backup.jsonl`.
     *   Once connectivity returns, an automatic backfill mechanism reads the pending records in batches of 50 and re-transmits them, completely preventing data loss.
-    *   Every reading is also permanently logged to a monthly CSV file (`/sensor_YYYY_MM_DD.csv`) on the SD card.
+    *   Every reading is also permanently logged to a monthly CSV file (e.g., `/log_YYYY_MM.csv`) on the SD card.
 
 ### 5.2 Web Implementation
 

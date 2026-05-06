@@ -110,17 +110,10 @@ GreenPulse is an end-to-end IoT monitoring platform designed for **Wolffia globo
 | GPIO 18 | SPI SCK |
 | GPIO 19 | SPI MISO |
 | GPIO 23 | SPI MOSI |
-| GPIO 25 | Relay 0 — Air Pump (active-LOW) |
-| GPIO 32 | Relay 1 — Grow Light (active-LOW) |
 
-**FreeRTOS Task Layout:**
-
-| Task | Core | Priority | Stack | Responsibility |
-|---|---|---|---|---|
-| `sensorTask` | Core 1 | 1 | 8 KB | Sensor reads, HTTP POST, relay sync |
-| `phTDSScheduleTask` | Core 1 | 2 | 8 KB | Time-based pH/TDS schedule enforcement |
-
-Shared resources are protected with four semaphores: `sensorMutex`, `phTDSScheduleMutex`, `sdMutex`, `dataLogMutex`.
+**Architecture Details:**
+- **Execution Model:** Single-threaded polling architecture utilizing non-blocking `millis()` checks for high stability without the overhead of RTOS task management.
+- **Relay Control:** Hardware relay controls and FreeRTOS semaphores are removed in Greenpulse V2.
 
 ---
 
@@ -144,7 +137,7 @@ Where V is the measured voltage in volts.
 | Coefficient c | 13.816135 |
 | Fit Quality (R²) | 0.9987 |
 
-Sampling uses **median filtering** over 40 ADC readings to reject impulse noise. Results are stored in µS/cm internally and converted for display.
+Sampling uses **median filtering** (bubble sort) over 10 ADC readings to reject impulse noise. Results are stored in µS/cm internally and converted for display.
 
 #### 2.2.2 EC/TDS Sensor — Two-Point Linear Calibration
 
@@ -195,15 +188,14 @@ Power On
    ├─ initSDCard()      SPI.begin, SD.begin, create /synced/
    ├─ initWiFi()        Connect or AP mode fallback
    ├─ initTime()        NTP sync → write to RTC
-   ├─ fetchDeviceConfig() GET /api/devices/:id/config (public, no JWT)
-   │     └─ Apply: thresholds, sampling_interval, relay states, schedules
-   └─ setupWebServer()  AsyncWebServer on port 80
-         └─ Start FreeRTOS tasks
+   └─ initializeCSVLog() Creates /log_YYYY_MM.csv if missing
 
-sensorTask() loop (every cfg_sampling_interval_ms, default 30 s):
+loop() (every READ_INTERVAL, default 60 s):
+   │
+   ├─ NTP Sync Check (every 24 hours)
    │
    ├─ readSensors()
-   │     ├─ 40× ADC reads → sort → median → voltage → pH/EC/TDS
+   │     ├─ 10× ADC reads → sort → median → voltage → pH/EC/TDS
    │     ├─ DS18B20 temperature
    │     ├─ AHT30 air temp + humidity
    │     └─ BH1750 light lux
@@ -211,19 +203,13 @@ sensorTask() loop (every cfg_sampling_interval_ms, default 30 s):
    ├─ Build JSON payload
    │     { device_id, ph_value, water_temperature_c, air_temperature_c,
    │       ec_value (µS/cm), tds_value (ppm), light_intensity (lux),
-   │       air_humidity, timestamp (ISO8601), created_at }
+   │       air_humidity, timestamp (ISO8601) }
    │
-   ├─ logSensorDataToSD()    always — append to /sensor_YYYY_MM_DD.csv
+   ├─ sendToBackend() → POST /api/sensor-data
+   │     ├─ success: trigger syncBackupToMongoDB() (backfill unsent SD rows)
+   │     └─ failure: append payload to SD Card (/backup.jsonl)
    │
-   ├─ if WiFi connected:
-   │     sendToBackend() → POST /api/sensor-data
-   │          success → totalSentToMongo++
-   │          failure → data already on SD (no extra action needed)
-   │
-   ├─ syncPendingData()      backfill unsent SD rows (batches of 50)
-   │
-   ├─ if 30 s elapsed:  fetchAndApplyRelayStates()  (live UI toggle sync)
-   └─ if 60 s elapsed:  checkRelaySchedules()        (time-based relay)
+   └─ writeToCSVLog() always — append to /log_YYYY_MM.csv
 ```
 
 #### JSON Payload Structure
@@ -253,20 +239,9 @@ sensorTask() loop (every cfg_sampling_interval_ms, default 30 s):
 
 | Direction | Endpoint | Method | Auth | Purpose |
 |---|---|---|---|---|
-| ESP32 → Backend | `/api/sensor-data` | POST | None | Submit sensor reading |
-| ESP32 → Backend | `/api/devices/:id/relay-states` | GET | None | Poll relay ON/OFF states |
-| ESP32 → Backend | `/api/devices/:id/config` | GET | None | Fetch full config on boot |
+| ESP32 → Backend | `/api/sensor-data` | POST | None | Submit sensor reading (batches of 50 during offline backfill) |
 
-All backend calls use `HTTPClient` with an 8–10 s timeout. On HTTP error, data is retained on the SD card for later backfill.
-
-#### Local Web Interface (AsyncWebServer port 80)
-
-| Endpoint | Method | Purpose |
-|---|---|---|
-| `/` | GET | Embedded HTML dashboard |
-| `/relay/airPump` | POST | Immediate toggle GPIO 25 |
-| `/relay/light` | POST | Immediate toggle GPIO 32 |
-| `/relay/status` | GET | Return current relay states |
+All backend calls use `HTTPClient` with a 10 s timeout. On HTTP error, data is retained on the SD card for later backfill. Local Web Interface has been removed in V2 for performance and stability.
 
 ---
 
@@ -274,20 +249,19 @@ All backend calls use `HTTPClient` with an 8–10 s timeout. On HTTP error, data
 
 ```
 Normal:     ESP32 ──POST──► Backend ──► MongoDB
-                  └──CSV──► SD card (always)
+                  └──CSV──► SD card (always /log_YYYY_MM.csv)
 
-Offline:    ESP32 ──CSV──► SD card (/sensor_YYYY_MM_DD.csv)
+Offline:    ESP32 ──JSONL──► SD card (/backup.jsonl)
                                          │
-                  (WiFi restored)         │
+                  (WiFi restored)        │
                                          ▼
             ESP32 ──batch of 50──► Backend ──► MongoDB
                   ──rewrite SD (remove synced rows)
 ```
 
-- SD files use daily rotation: `/sensor_YYYY_MM_DD.csv`
-- Successfully synced files are moved to `/synced/` folder
-- Maximum 7 days of rolling logs retained
-- Backfill sends in batches of 50 rows to avoid memory overflow
+- Monthly CSV logs are saved to: `/log_YYYY_MM.csv`
+- Backups for offline failover are stored in `/backup.jsonl`
+- Backfill sends in batches of 50 rows to avoid memory overflow, rewriting the JSONL file to remove successfully synced entries.
 
 ---
 
@@ -297,8 +271,8 @@ Offline:    ESP32 ──CSV──► SD card (/sensor_YYYY_MM_DD.csv)
 |---|---|
 | **Sensor Management** | Hardware init, ADC sampling, median filtering, calibration equation application, temperature compensation |
 | **Data Processing** | JSON payload construction, ISO timestamp generation, unique `data_id` assignment |
-| **Communication Management** | HTTP POST to backend, relay-states poll, config fetch on boot, local AsyncWebServer |
-| **Device Maintenance** | SD card logging, backfill sync, Wi-Fi auto-reconnect, NTP 24 h re-sync, relay schedule enforcement |
+| **Communication Management** | HTTP POST to backend |
+| **Device Maintenance** | SD card logging, backfill sync, Wi-Fi auto-reconnect, NTP 24 h re-sync |
 
 ---
 
@@ -454,12 +428,12 @@ Device ──(1:0..M)► SystemLog
 
 ```
 [Sensor Hardware]
-      │  ADC/I²C/OneWire reads (40 samples, median filter)
+      │  ADC/I²C/OneWire reads (10 samples, median filter)
       ▼
 [ESP32 Processing]
       │  Calibration equations → JSON payload + ISO timestamp + UUID
       ▼
-[SD Card]  ◄──── always logged to /sensor_YYYY_MM_DD.csv
+[SD Card]  ◄──── always logged to /log_YYYY_MM.csv
       │
 [HTTP POST /api/sensor-data]
       │
@@ -480,16 +454,16 @@ Device ──(1:0..M)► SystemLog
 
 ```
 [ESP32]  ── POST fails (no Wi-Fi / backend down) ──►  [SD Card]
-                                                       /sensor_YYYY_MM_DD.csv
-                                                       (append CSV row)
+                                                       /backup.jsonl
+                                                       (append JSON string)
 
-[ESP32]  ── Wi-Fi restored ──►  syncPendingData()
+[ESP32]  ── Wi-Fi restored ──►  syncBackupToMongoDB()
               │
               │  read 50 rows from SD
               ├──► POST /api/sensor-data (batch)
               │         success → remove sent rows from SD
               │         failure → retry next cycle
-              └──► move fully-synced daily file to /synced/
+              └──► rewrite /backup.jsonl with remaining rows
 ```
 
 ### 4.3 Alert Generation Flow
@@ -514,26 +488,7 @@ Device ──(1:0..M)► SystemLog
 
 ### 4.4 Device Configuration Sync Flow (ESP32 Boot)
 
-```
-[ESP32 boots] ── Wi-Fi connected ──► fetchDeviceConfig()
-      │
-      │  GET /api/devices/:deviceId/config  (no JWT required)
-      │
-[Backend returns]
-      { sampling_interval, ph_min/max, ec_min/max,
-        water_temp_min/max, air_temp_min/max, light_min/max,
-        relays:[{relay_id, pin, status}],
-        schedules:[{days, startHour, stopHour, relays}] }
-      │
-[ESP32 applies]
-      ├── cfg_sampling_interval_ms  ← sampling_interval × 1000
-      ├── cfg_ph_min/max, cfg_ec_min/max, …  ← threshold globals
-      ├── setRelay(pin, status) for each relay
-      └── relaySchedules[] ← parsed schedule objects
-              │
-      [checkRelaySchedules() every 60 s]
-              └── compare RTC time → fire setRelay() at start/stop
-```
+*Note: Remote configuration sync has been removed in Greenpulse V2. The device uses hardcoded values for connection settings and default intervals to maximize operational stability.*
 
 ---
 
@@ -628,17 +583,12 @@ The GreenPulse platform is split across three independently-hosted tiers plus an
 ║   │         ESP32 Node(s) — one per Wolffia cultivation basin        │    ║
 ║   │                                                                  │    ║
 ║   │   [Sensors: pH, EC/TDS, DS18B20, AHT30, BH1750, DS1302, SD]      │    ║
-║   │   [Control: Relay 0 (Air Pump GPIO 25) · Relay 1 (Light GPIO 32)]│    ║
-║   │                                                                  │    ║
-║   │   Local AsyncWebServer :80  ─ same-LAN emergency control         │    ║
 ║   └────────────────────────┬─────────────────────────────────────────┘    ║
 ║                            │ Wi-Fi 2.4 GHz                                ║
 ╚════════════════════════════╪══════════════════════════════════════════════╝
                              │ HTTPS / TLS 1.3
                              │
-                             │  • POST /api/sensor-data        (every N s)
-                             │  • GET  /api/devices/:id/config (on boot)
-                             │  • GET  /api/devices/:id/relay-states (30 s)
+                             │  • POST /api/sensor-data        (every 60 s)
                              │
                              ▼
 ╔══════════════════════════════════════════════════════════════════════════╗

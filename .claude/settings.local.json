@@ -11,7 +11,10 @@
       "Bash(node -e ' *)",
       "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTc2ZTJmNjllODRhNDAzMzA4YWU2NGMiLCJlbWFpbCI6ImZpcnN0QGZhcm0uY29tIiwicm9sZSI6ImZhcm1lciIsImlhdCI6MTc3NzAwNjI5MywiZXhwIjoxNzc3MDkyNjkzfQ.FCJ3No42gMxEYprvpo9XIDMyfJ6_KTsMxjKYqKlgtfQ' 'http://localhost:3000/api/alerts?status=active&limit=10')",
       "Bash(node -e 'const c=[];process.stdin.on\\('\\\\''data'\\\\'',d=>c.push\\(d\\)\\);process.stdin.on\\('\\\\''end'\\\\'',\\(\\)=>{ *)",
-      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTc2ZTJmNjllODRhNDAzMzA4YWU2NGMiLCJlbWFpbCI6ImZpcnN0QGZhcm0uY29tIiwicm9sZSI6ImZhcm1lciIsImlhdCI6MTc3NzAwNjI5MywiZXhwIjoxNzc3MDkyNjkzfQ.FCJ3No42gMxEYprvpo9XIDMyfJ6_KTsMxjKYqKlgtfQ' 'http://localhost:3000/api/alerts?status=active&limit=50')"
+      "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTc2ZTJmNjllODRhNDAzMzA4YWU2NGMiLCJlbWFpbCI6ImZpcnN0QGZhcm0uY29tIiwicm9sZSI6ImZhcm1lciIsImlhdCI6MTc3NzAwNjI5MywiZXhwIjoxNzc3MDkyNjkzfQ.FCJ3No42gMxEYprvpo9XIDMyfJ6_KTsMxjKYqKlgtfQ' 'http://localhost:3000/api/alerts?status=active&limit=50')",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
