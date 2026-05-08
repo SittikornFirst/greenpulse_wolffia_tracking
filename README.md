@@ -447,25 +447,25 @@ The GreenPulse system underwent extensive testing comprising 52 comprehensive te
 |:---|:---|:---|:---|:---|:---:|:---|
 | ESP-U01 | Embedded Unit | Wi-Fi station mode connection on boot | Serial prints WiFi connected. IP: <address> within 15 s; fallback to AP mode if unreachable. | WiFi connected within 12s; IP assigned. | Pass | Critical |
 | ESP-U02 | Embedded Unit | pH value in valid range using quadratic calibration | 10 readings in range 6.5–7.5 in buffer; no NaN or negative values. | Readings stable at 7.01; no errors. | Pass | Critical |
-| ESP-U07 | Embedded Unit | Median filter rejects outliers from noisy ADC | Median output remains within ±2% of stable signal despite injected 3.3V spikes. | Filtered output within ±0.5% variance. | Pass | High |
-| ESP-U09 | Embedded Unit | NTP sync sets RTC to correct time on boot | RTC time within ±1 s of NTP reference; [Time] NTP sync successful. | Time synchronized successfully on boot. | Pass | High |
-| ESP-U10 | Embedded Unit | Device uses RTC time when NTP unreachable | Serial shows [Time] NTP failed, using RTC; payload uses valid ISO 8601 timestamp. | Correctly fell back to RTC during disconnect. | Pass | High |
+| ESP-U03 | Embedded Unit | Median filter rejects outliers from noisy ADC | Median output remains within ±2% of stable signal despite injected 3.3V spikes. | Filtered output within ±0.5% variance. | Pass | High |
+| ESP-U04 | Embedded Unit | NTP sync sets RTC to correct time on boot | RTC time within ±1 s of NTP reference; [Time] NTP sync successful. | Time synchronized successfully on boot. | Pass | High |
+| ESP-U05 | Embedded Unit | Device uses RTC time when NTP unreachable | Serial shows [Time] NTP failed, using RTC; payload uses valid ISO 8601 timestamp. | Correctly fell back to RTC during disconnect. | Pass | High |
 | ESP-I01 | Embedded Int. | Complete read → filter → format → transmit cycle | Within 30s: sensors read → JSON built → CSV appended → POST succeeds. | Cycle completed in 18s. | Pass | Critical |
-| ESP-I03 | Embedded Int. | POST failure writes data to SD card | CSV file `/sensor_YYYY_MM_DD.csv` retains all 7 sensor values during offline periods. | Data logged to SD during simulated outage. | Pass | Critical |
-| ESP-I04 | Embedded Int. | Reconnect triggers batch upload of SD-buffered data | `syncPendingData()` uploads offline rows in batches of 50; SD rows cleared upon success. | Batched 50 rows uploaded; SD cleared. | Pass | Critical |
+| ESP-I02 | Embedded Int. | POST failure writes data to SD card | CSV file `/sensor_YYYY_MM_DD.csv` retains all 7 sensor values during offline periods. | Data logged to SD during simulated outage. | Pass | Critical |
+| ESP-I03 | Embedded Int. | Reconnect triggers batch upload of SD-buffered data | `syncPendingData()` uploads offline rows in batches of 50; SD rows cleared upon success. | Batched 50 rows uploaded; SD cleared. | Pass | Critical |
 
 #### 6.1.2 Back-End API and Web Frontend
 
 | Test ID | Category | Test Name | Expected Result | Actual Result | Status | Priority |
 |:---|:---|:---|:---|:---|:---:|:---|
 | API-01 | Backend API | Valid sensor POST → 201 + MongoDB Record | HTTP 201; new document in sensordata collection with all 7 fields. | Record created with all fields. | Pass | Critical |
-| API-03 | Backend API | Authenticated endpoints reject missing/invalid JWT | HTTP 401; `{ success: false, message: "No token provided" }`. | Rejected with 401 Unauthorized. | Pass | Critical |
-| API-05 | Backend API | Sensor value below minimum creates alert record | HTTP 201; new Alert document created with alert_type, status: "active". | Alert generated for low pH. | Pass | Critical |
-| API-06 | Backend API | Duplicate Alert Prevention | Second threshold breach does not create a duplicate active alert. | No duplicate alerts created. | Pass | High |
-| API-08 | Backend API | GET /config returns full config without JWT | HTTP 200; JSON contains all threshold limits, relays, and schedules. | Config returned successfully. | Pass | Critical |
+| API-02 | Backend API | Authenticated endpoints reject missing/invalid JWT | HTTP 401; `{ success: false, message: "No token provided" }`. | Rejected with 401 Unauthorized. | Pass | Critical |
+| API-03 | Backend API | Sensor value below minimum creates alert record | HTTP 201; new Alert document created with alert_type, status: "active". | Alert generated for low pH. | Pass | Critical |
+| API-04 | Backend API | Duplicate Alert Prevention | Second threshold breach does not create a duplicate active alert. | No duplicate alerts created. | Pass | High |
+| API-05 | Backend API | GET /config returns full config without JWT | HTTP 200; JSON contains all threshold limits, relays, and schedules. | Config returned successfully. | Pass | Critical |
 | FE-01 | Frontend | Dashboard sensor widgets update without refresh | WS frames show `{ type: "subscribe" }`; sensor widgets update within 2s of POST. | Widgets updated instantly via WS. | Pass | Critical |
-| FE-03 | Frontend | Alert Toast on Threshold Breach | AlertToast component renders for 6s; navbar alert badge increments. | Toast shown; badge updated. | Pass | Critical |
-| FE-10 | Frontend | Login, session persistence, and logout state clearing | Token persists in localStorage; logout strictly calls Pinia `$reset()` to clear all state. | State cleared correctly on logout. | Pass | Critical |
+| FE-02 | Frontend | Alert Toast on Threshold Breach | AlertToast component renders for 6s; navbar alert badge increments. | Toast shown; badge updated. | Pass | Critical |
+| FE-03 | Frontend | Login, session persistence, and logout state clearing | Token persists in localStorage; logout strictly calls Pinia `$reset()` to clear all state. | State cleared correctly on logout. | Pass | Critical |
 
 ### 6.2 Sensor Calibration Verification
 
@@ -473,17 +473,17 @@ The GreenPulse system underwent extensive testing comprising 52 comprehensive te
 |:---|:---|:---|:---|:---:|:---|
 | CAL-01 | pH reading accuracy at low buffer (pH 4.01) | Readings in range 3.81–4.21 (±0.20 tolerance). | 4.05 pH | Pass | Critical |
 | CAL-02 | pH reading accuracy at mid buffer (pH 6.86) | Readings in range 6.66–7.06. | 6.89 pH | Pass | Critical |
-| CAL-04 | TDS Two-Point Linear Calibration | 500 ppm standard yields 475–525 ppm; 1000 ppm standard yields 950–1050 ppm. | 512 ppm / 985 ppm | Pass | High |
-| CAL-05 | DS18B20 Water Temperature Accuracy | Readings within ±0.5 °C (datasheet) / ±2.5 °C (field) of reference thermometer. | 0.2 °C variance observed. | Pass | High |
+| CAL-03 | TDS Two-Point Linear Calibration | 500 ppm standard yields 475–525 ppm; 1000 ppm standard yields 950–1050 ppm. | 512 ppm / 985 ppm | Pass | High |
+| CAL-04 | DS18B20 Water Temperature Accuracy | Readings within ±0.5 °C (datasheet) / ±2.5 °C (field) of reference thermometer. | 0.2 °C variance observed. | Pass | High |
 
 ### 6.3 Field Deployment Tests
 
 | Test ID | Test Name | Expected Result | Actual Result | Status | Priority |
 |:---|:---|:---|:---|:---:|:---|
 | FD-01 | 24-Hour Data Delivery Rate | Actual readings ≥ 2851 (≥ 99% of expected 2880 readings). | 2874 readings (99.8%) | Pass | Critical |
-| FD-03 | End-to-End Latency | Sensor read to dashboard display latency consistently < 10 s; mean < 5 s. | Mean latency: 3.2s | Pass | High |
-| FD-04 | Power Outage Recovery (Zero Data Loss) | SD backfill successfully delivers all buffered records post-outage; no time-series gap. | All records recovered post-outage. | Pass | Critical |
-| FD-05 | 7-Day Continuous Stability | No ESP32 watchdog reset or crash within 7 days; data delivery rate ≥ 98%. | 100% uptime over 7 days. | Pass | Critical |
+| FD-02 | End-to-End Latency | Sensor read to dashboard display latency consistently < 10 s; mean < 5 s. | Mean latency: 3.2s | Pass | High |
+| FD-03 | Power Outage Recovery (Zero Data Loss) | SD backfill successfully delivers all buffered records post-outage; no time-series gap. | All records recovered post-outage. | Pass | Critical |
+| FD-04 | 7-Day Continuous Stability | No ESP32 watchdog reset or crash within 7 days; data delivery rate ≥ 98%. | 100% uptime over 7 days. | Pass | Critical |
 
 
 ### 6.4 Test Summary Matrix
