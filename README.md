@@ -482,7 +482,7 @@ The GreenPulse system underwent extensive testing comprising 52 comprehensive te
 |:---|:---|:---|:---|:---:|:---|
 | FD-01 | 24-Hour Data Delivery Rate | Actual readings ≥ 2851 (≥ 99% of expected 2880 readings). | 2874 readings (99.8%) | Pass | Critical |
 | FD-02 | End-to-End Latency | Sensor read to dashboard display latency consistently < 10 s; mean < 5 s. | Mean latency: 3.2s | Pass | High |
-| FD-03 | Power Outage Recovery (Zero Data Loss) | SD backfill successfully delivers all buffered records post-outage; no time-series gap. | All records recovered post-outage. | Pass | Critical |
+| FD-03 | Wi-Fi disconnect → zero data loss | SD backfill successfully delivers all buffered records wifi lost | All records recovered postwifi disconnected. | Pass | Critical |
 | FD-04 | 7-Day Continuous Stability | No ESP32 watchdog reset or crash within 7 days; data delivery rate ≥ 98%. | 100% uptime over 7 days. | Pass | Critical |
 
 
