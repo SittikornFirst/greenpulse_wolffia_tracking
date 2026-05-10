@@ -14,16 +14,39 @@
             :show-placeholder="true"
             placeholder="Select a device..."
           />
+          <template v-if="timeRange === 'custom'">
+            <div class="entries-selector">
+              <label for="analytics-from">From</label>
+              <input
+                id="analytics-from"
+                type="datetime-local"
+                v-model="dateFrom"
+                @change="refreshAll(true)"
+                class="datetime-input"
+              />
+            </div>
+            <div class="entries-selector">
+              <label for="analytics-to">To</label>
+              <input
+                id="analytics-to"
+                type="datetime-local"
+                v-model="dateTo"
+                @change="refreshAll(true)"
+                class="datetime-input"
+              />
+            </div>
+          </template>
           <div class="entries-selector">
             <label for="analytics-time">Time Range</label>
             <div class="select-wrapper">
-              <select id="analytics-time" v-model="timeRange">
-                <option value="1h">1 Hour</option>
-                <option value="6h">6 Hours</option>
-                <option value="24h">24 Hours</option>
-                <option value="7d">7 Days</option>
-                <option value="30d">30 Days</option>
-                <option value="1y">1 Year</option>
+              <select id="analytics-time" v-model="timeRange" @change="onTimeRangeChange">
+                <option value="1h">Last 1 Hour</option>
+                <option value="6h">Last 6 Hours</option>
+                <option value="24h">Last 24 Hours</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="all">All Time</option>
+                <option value="custom">Custom Range</option>
               </select>
             </div>
           </div>
@@ -41,7 +64,7 @@
           </div>
         </div>
         <button
-          @click="refreshData"
+          @click="refreshAll(false)"
           :disabled="loading"
           class="btn btn-primary refresh-btn"
         >
@@ -288,11 +311,17 @@ export default {
 
     const loading = ref(false);
     const allTableRows = ref([]);
+    // Bucketed full-range dataset for stats panels (Avg cards, Recommendations,
+    // Correlations). Refetched only when device or range/dates change — NOT on
+    // page navigation, so flipping pages doesn't make the panels flicker.
+    const rangeData = ref([]);
     const currentPage = ref(1);
     const entriesPerPage = ref(10);
     const totalEntries = ref(0);
     const totalPages = ref(1);
     const timeRange = ref("24h");
+    const dateFrom = ref("");
+    const dateTo = ref("");
     const selectedDeviceId = ref(null);
     const minMaxData = ref(null);
 
@@ -300,7 +329,7 @@ export default {
     const hasDevices = computed(() => devices.value.length > 0);
 
     const metricCards = computed(() => {
-      if (!allTableRows.value || !allTableRows.value.length) {
+      if (!rangeData.value || !rangeData.value.length) {
         return [
           {
             id: "ph",
@@ -376,7 +405,7 @@ export default {
       }
 
       const avg = (key) => {
-        const values = tableRows.value
+        const values = rangeData.value
           .map((row) => row[key]?.value)
           .filter((value) => typeof value === "number");
         if (!values.length) return null;
@@ -527,7 +556,7 @@ export default {
 
     const extractPairs = (keyA, keyB) => {
       const xs = [], ys = [];
-      for (const row of allTableRows.value) {
+      for (const row of rangeData.value) {
         const x = row[keyA]?.value, y = row[keyB]?.value;
         if (typeof x === "number" && typeof y === "number" && !isNaN(x) && !isNaN(y)) {
           xs.push(x); ys.push(y);
@@ -544,7 +573,7 @@ export default {
     };
 
     const correlations = computed(() => {
-      if (allTableRows.value.length < 5) return [];
+      if (rangeData.value.length < 5) return [];
 
       const pairs = [
         {
@@ -616,7 +645,7 @@ export default {
     });
 
     const recommendations = computed(() => {
-      if (!allTableRows.value.length) return [];
+      if (!rangeData.value.length) return [];
 
       const checks = [
         {
@@ -689,7 +718,7 @@ export default {
 
       return checks
         .map((check) => {
-          const values = allTableRows.value
+          const values = rangeData.value
             .map((row) => row[check.key]?.value)
             .filter((v) => typeof v === "number");
           if (!values.length) return null;
@@ -764,13 +793,19 @@ export default {
           if (config) updateThresholdsFromConfig(config);
         }
 
+        const opts = {
+          range: timeRange.value,
+          page: currentPage.value,
+          limit: entriesPerPage.value,
+        };
+        if (timeRange.value === "custom") {
+          if (dateFrom.value) opts.startDate = new Date(dateFrom.value).toISOString();
+          if (dateTo.value) opts.endDate = new Date(dateTo.value).toISOString();
+        }
+
         const response = await sensorDataStore.fetchHistoricalData(
           device.device_id,
-          {
-            range: timeRange.value,
-            page: currentPage.value,
-            limit: entriesPerPage.value,
-          },
+          opts,
         );
 
         if (response?.success) {
@@ -797,6 +832,40 @@ export default {
       }
     };
 
+    // Bucketed full-range fetch — no `page` param so the backend takes the
+    // bucketed branch and returns ~60 averaged points across the whole window.
+    const refreshRangeData = async () => {
+      if (!selectedDeviceId.value) return;
+      const device = devices.value.find(
+        (d) => d.device_id === selectedDeviceId.value,
+      );
+      if (!device) return;
+
+      const opts = { range: timeRange.value };
+      if (timeRange.value === "custom") {
+        if (dateFrom.value) opts.startDate = new Date(dateFrom.value).toISOString();
+        if (dateTo.value) opts.endDate = new Date(dateTo.value).toISOString();
+      }
+
+      try {
+        const response = await sensorDataStore.fetchHistoricalData(
+          device.device_id,
+          opts,
+        );
+        rangeData.value = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+      } catch (e) {
+        console.error("Failed to fetch range stats:", e);
+        rangeData.value = [];
+      }
+    };
+
+    const refreshAll = (resetPage = false) =>
+      Promise.all([refreshRangeData(), refreshData(resetPage)]);
+
     const handlePageChange = (page) => {
       if (page < 1 || page > totalPages.value || page === currentPage.value)
         return;
@@ -804,9 +873,16 @@ export default {
       refreshData();
     };
 
-    // Watch for device or entries changes
-    watch([selectedDeviceId, timeRange], async () => {
-      await refreshData(true);
+    const onTimeRangeChange = () => {
+      // For Custom Range, wait for the user to pick dates before fetching.
+      if (timeRange.value !== "custom") {
+        refreshAll(true);
+      }
+    };
+
+    // Watch for device changes (timeRange is handled via onTimeRangeChange)
+    watch(selectedDeviceId, async () => {
+      await refreshAll(true);
     });
 
     watch(entriesPerPage, () => {
@@ -828,7 +904,7 @@ export default {
         } else {
           selectedDeviceId.value = devices.value[0].device_id;
         }
-        await refreshData();
+        await refreshAll();
       }
     });
 
@@ -858,6 +934,9 @@ export default {
       hasDevices,
       selectedDeviceId,
       timeRange,
+      dateFrom,
+      dateTo,
+      onTimeRangeChange,
       entriesPerPage,
       currentPage,
       totalPages,
@@ -867,9 +946,11 @@ export default {
       tableRows,
       visiblePages,
       allTableRows,
+      rangeData,
       recommendations,
       correlations,
       refreshData,
+      refreshAll,
       handlePageChange,
       formatTimestamp,
       formatValue,
@@ -1015,6 +1096,20 @@ export default {
   transform: rotate(45deg);
   pointer-events: none;
   margin-top: -3px;
+}
+
+.datetime-input {
+  appearance: none;
+  background: transparent;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  width: 100%;
+  font-family: inherit;
 }
 
 .btn {

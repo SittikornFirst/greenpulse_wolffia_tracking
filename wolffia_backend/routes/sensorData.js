@@ -398,6 +398,43 @@ router.get("/:deviceId/history", async (req, res) => {
       return res.status(404).json({ success: false, message: "Device not found" });
     }
 
+    // Paginated raw-row mode: callers pass `page` when they want a table (e.g.
+    // AnalyticsView, DeviceDetailsView). Charts omit `page` and fall through
+    // to the bucketed branch below.
+    if (req.query.page !== undefined) {
+      const pageNum = Math.max(1, parseInt(req.query.page) || 1);
+      const limitNum = Math.max(1, parseInt(req.query.limit) || 20);
+
+      const rawQuery = { device_id: device.device_id };
+      if (range && range !== "all" && HISTORY_RANGE_MS[range]) {
+        rawQuery.created_at = { $gte: new Date(Date.now() - HISTORY_RANGE_MS[range]) };
+        if (endDate) rawQuery.created_at.$lte = new Date(endDate);
+      } else if (startDate || endDate) {
+        rawQuery.created_at = {};
+        if (startDate) rawQuery.created_at.$gte = new Date(startDate);
+        if (endDate) rawQuery.created_at.$lte = new Date(endDate);
+      }
+
+      const [total, rows] = await Promise.all([
+        SensorData.countDocuments(rawQuery),
+        SensorData.find(rawQuery)
+          .sort({ created_at: -1 })
+          .skip((pageNum - 1) * limitNum)
+          .limit(limitNum),
+      ]);
+
+      return res.json({
+        success: true,
+        data: rows.map((doc) => attachVirtualMetrics(doc.toObject({ virtuals: true }))),
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.max(1, Math.ceil(total / limitNum)),
+        },
+      });
+    }
+
     const baseQuery = { device_id: device.device_id };
     let bucketMs = null;
     let spanMs = null;

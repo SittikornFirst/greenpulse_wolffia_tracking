@@ -140,10 +140,31 @@
                 </div>
 
                 <div v-if="logTotalPages > 1" class="log-pagination">
-                    <span class="log-page-info">Page {{ logPage }} of {{ logTotalPages }} ({{ logTotal }} readings)</span>
+                    <span class="log-page-info">
+                        Showing
+                        {{ (logPage - 1) * logLimit + 1 }}–{{ Math.min(logPage * logLimit, logTotal) }}
+                        of {{ logTotal }} readings
+                    </span>
                     <div class="log-page-btns">
-                        <button @click="changeLogPage(logPage - 1)" :disabled="logPage <= 1 || logLoading" class="btn btn-secondary btn-sm">Prev</button>
-                        <button @click="changeLogPage(logPage + 1)" :disabled="logPage >= logTotalPages || logLoading" class="btn btn-secondary btn-sm">Next</button>
+                        <button
+                            class="btn btn-outline page-nav"
+                            :disabled="logPage === 1 || logLoading"
+                            @click="changeLogPage(logPage - 1)"
+                        >‹ Prev</button>
+                        <span v-if="logVisiblePages[0] > 1" class="page-ellipsis">…</span>
+                        <button
+                            v-for="page in logVisiblePages"
+                            :key="page"
+                            class="page-number"
+                            :class="{ active: page === logPage }"
+                            @click="changeLogPage(page)"
+                        >{{ page }}</button>
+                        <span v-if="logVisiblePages[logVisiblePages.length - 1] < logTotalPages" class="page-ellipsis">…</span>
+                        <button
+                            class="btn btn-outline page-nav"
+                            :disabled="logPage === logTotalPages || logLoading"
+                            @click="changeLogPage(logPage + 1)"
+                        >Next ›</button>
                     </div>
                 </div>
             </div>
@@ -345,6 +366,19 @@ export default {
                 return device.value.config_id;
             }
             return null;
+        });
+
+        const logVisiblePages = computed(() => {
+            const pages = [];
+            const range = 2;
+            for (
+                let i = Math.max(1, logPage.value - range);
+                i <= Math.min(logTotalPages.value, logPage.value + range);
+                i++
+            ) {
+                pages.push(i);
+            }
+            return pages;
         });
 
         const farmLink = computed(() => {
@@ -573,6 +607,7 @@ export default {
             logLimit,
             logTotal,
             logTotalPages,
+            logVisiblePages,
             logTimeRange,
             logDateFrom,
             logDateTo,
@@ -982,14 +1017,55 @@ export default {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 1rem;
+    padding: 1rem 1.25rem;
     border-top: 1px solid #f3f4f6;
     background: #fafafa;
     border-radius: 0 0 0.875rem 0.875rem;
     margin-top: -1px;
+    flex-wrap: wrap;
+    gap: 0.75rem;
 }
-.log-page-info { font-size: 0.78rem; color: #9ca3af; }
-.log-page-btns { display: flex; gap: 0.4rem; }
+.log-page-info { font-size: 0.85rem; color: #6b7280; }
+.log-page-btns { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+
+.log-page-btns .page-nav {
+    padding: 0.5rem 0.9rem;
+    font-size: 0.875rem;
+    border-radius: 0.5rem;
+}
+
+.log-page-btns .page-ellipsis {
+    color: #9ca3af;
+    font-size: 0.875rem;
+    padding: 0 0.25rem;
+}
+
+.log-page-btns .page-number {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.625rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid #e5e7eb;
+    background: white;
+    color: #374151;
+}
+
+.log-page-btns .page-number:hover:not(.active) {
+    background: #f3f4f6;
+}
+
+.log-page-btns .page-number.active {
+    background: #10b981;
+    color: white;
+    border-color: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
 
 .spin { animation: spin 0.8s linear infinite; }
 
