@@ -39,7 +39,7 @@ ThreeWire myWire(RTC_DAT_PIN, RTC_CLK_PIN, RTC_RST_PIN);  // DAT, CLK, RST
 RtcDS1302<ThreeWire> rtc(myWire);
 
 // ============= CONFIGURATION =============
-const char* WIFI_SSID = "ICT-SP2025-08";
+const char* WIFI_SSID = "Jacky_2.4G";
 const char* WIFI_PASSWORD = "0959396462";
 const char* BACKEND_API_URL = "https://greenpulse-wolffia-tracking.onrender.com/api/sensor-data";
 const char* DEVICE_ID = "GREENPULSE-V1-MKUMW0RG-1JS0A";

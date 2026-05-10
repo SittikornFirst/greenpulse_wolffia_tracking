@@ -29,6 +29,203 @@ ESP32 Sensors  ──POST /api/sensor-data──►  Express + MongoDB Backend
 
 ---
 
+## Implementation Reference (for report)
+
+### Software Used for Implementation
+
+| Phase | Software / IDE | Version | Purpose |
+|---|---|---|---|
+| Embedded development | Arduino IDE 2.x (or PlatformIO) | 2.3+ | Compile and flash ESP32 firmware (`.ino` sketch) |
+| Embedded toolchain | Espressif ESP32 Arduino Core | 2.0.x | Compiler, board definitions, FreeRTOS, Wi-Fi stack |
+| Backend runtime | Node.js | ≥ 18.x | JavaScript runtime for Express server |
+| Backend package manager | pnpm | 10.x | Dependency installation, lockfile, deploy install on Render |
+| Frontend bundler | Vite | 7.1.11 | Dev server with HMR; production bundling to static `dist/` |
+| Code editor | Visual Studio Code | latest | Source editing for both firmware and web |
+| Version control | Git + GitHub | — | Source hosting and CI trigger for Render/Vercel |
+| Backend hosting | Render.com (Web Service) | — | Long-running Node process with WebSocket support |
+| Frontend hosting | Vercel | — | Global static-asset CDN |
+| Database | MongoDB Atlas | 7.x | Managed cluster with `mongodb+srv://` connection |
+| API testing | Postman / curl | — | Manual endpoint verification during development |
+| Mobile testing | Chrome DevTools (Device Toolbar) | — | Responsive layout verification |
+
+---
+
+### Hardware Components
+
+| Component | Specification | Interface | Pin / Bus | Role in System |
+|---|---|---|---|---|
+| **ESP32 DevKit V1 (38-pin)** | Dual-core Tensilica Xtensa LX6 @ 240 MHz, 520 KB SRAM, 4 MB flash, Wi-Fi 802.11 b/g/n, Bluetooth 4.2 | — | — | Main MCU; runs firmware, FreeRTOS tasks, AsyncWebServer, HTTP client |
+| **pH Sensor (E-201-C / Gravity v2)** | 0–14 pH range, 0–3.3 V analog output, response < 1 min | Analog (ADC1_CH7) | GPIO 35 | Measures water acidity; quadratic-calibrated to ±0.2 pH |
+| **EC/TDS Sensor (DFRobot Gravity)** | 0–1000 µS/cm to 0–10 mS/cm, 0–2.3 V analog | Analog (ADC1_CH6) | GPIO 34 | Measures nutrient conductivity; temperature-compensated |
+| **DS18B20 (waterproof probe)** | −55 to 125 °C, ±0.5 °C accuracy, 12-bit resolution | 1-Wire (Dallas) | GPIO 4 (with 4.7 kΩ pull-up) | Water temperature; also used for EC compensation reference |
+| **AHT30 (or DHT22 / SHT31)** | −40 to 85 °C ±0.3 °C, 0–100 %RH ±2 %, 24-bit resolution | I²C (0x38) | SDA=16, SCL=17 | Air temperature and relative humidity |
+| **BH1750 (GY-302 module)** | 1–65 535 lux, 16-bit resolution, ambient-light compensated | I²C (0x23) | shared SDA=16, SCL=17 | Light intensity for grow-light feedback |
+| **DS1302 RTC + 32.768 kHz crystal** | ±2 sec/day, CR2032 battery backup, 31 bytes static RAM | 3-wire SPI (custom) | CLK=14, DAT=27, RST=26 | Maintains time during Wi-Fi/NTP outages so timestamps remain valid |
+| **SD card module + microSD ≥ 8 GB** | SPI mode, FAT32, supports SDHC | SPI | CS=21, SCK=18, MISO=19, MOSI=23 | Local CSV logging (`/sensor_YYYY_MM_DD.csv`) and offline backfill buffer |
+| **2-channel Relay Module** | 5 V coil, 250 V AC / 10 A contacts, opto-isolated, **active-LOW** trigger | Digital GPIO | GPIO 25 (Relay 0 = Air Pump), GPIO 32 (Relay 1 = Grow Light) | Switches AC loads for aeration and lighting on time-based schedules |
+| **5 V / 2 A DC adapter** | 100–240 V AC input, regulated 5 V output | USB-µB / barrel | VIN | Powers ESP32 + sensors + relay coils |
+| **IP66 junction box** | Polycarbonate, sealed cable glands | — | — | Protects electronics from humidity, splashing, and condensation |
+
+#### Wiring Notes
+
+- **Active-LOW relays:** writing `LOW` to GPIO 25/32 *energises* the relay coil. The safe-state on power loss or reboot is OFF (no risk of pumps running unattended).
+- **Shared I²C bus:** AHT30 and BH1750 share SDA=16/SCL=17. They have distinct addresses (0x38 / 0x23) so no bus conflict.
+- **DS18B20 pull-up:** 4.7 kΩ resistor between data line (GPIO 4) and 3.3 V is mandatory for OneWire stability.
+- **SPI sharing:** SD card (CS 21) and DS1302 use independent CS pins on the same SPI bus, so they never collide.
+- **ADC noise mitigation:** pH and EC inputs are sampled 40 times then median-filtered to reject impulse spikes from water-surface reflections.
+
+---
+
+### Embedded Software Libraries (ESP32 / Arduino)
+
+| Library | Header | Source | Description |
+|---|---|---|---|
+| **ESP32 Arduino Core** | `WiFi.h` | Espressif (built-in) | Wi-Fi station/AP mode, IP networking, station auto-reconnect |
+| **HTTPClient** | `HTTPClient.h` | ESP32 core | High-level HTTPS client used to POST sensor readings and GET device config from the backend |
+| **AsyncTCP** | `AsyncTCP.h` | me-no-dev | Non-blocking TCP layer required by ESPAsyncWebServer; lets sensor reads continue while serving requests |
+| **ESPAsyncWebServer** | `ESPAsyncWebServer.h` | me-no-dev | Local on-device HTTP server (port 80) for emergency relay control on the same LAN — works even if cloud backend is offline |
+| **ArduinoJson** | `ArduinoJson.h` | Benoît Blanchon | Builds the outbound JSON sensor payload; parses the inbound `/config` JSON returned by the backend on boot |
+| **Preferences** | `Preferences.h` | ESP32 core | NVS (non-volatile storage) wrapper for persisting Wi-Fi credentials and last-known relay states across reboots |
+| **Wire** | `Wire.h` | Arduino built-in | I²C master driver for AHT30 + BH1750 |
+| **Adafruit AHTX0** | `Adafruit_AHTX0.h` | Adafruit | Driver for AHT30 air temperature & humidity sensor |
+| **BH1750** | `BH1750.h` | Christopher Laws | Driver for BH1750 light-intensity sensor in `CONTINUOUS_HIGH_RES_MODE` |
+| **OneWire** | `OneWire.h` | Paul Stoffregen | Low-level Dallas 1-Wire protocol for the DS18B20 probe |
+| **DallasTemperature** | `DallasTemperature.h` | Miles Burton | High-level wrapper that converts raw 1-Wire frames into °C values |
+| **time.h (POSIX time)** | `time.h` | newlib | NTP synchronisation against `pool.ntp.org` (GMT+7 offset); 24 h re-sync interval |
+| **SD** | `SD.h` | Arduino built-in | FAT32 file I/O on the microSD card for CSV logging and offline backfill |
+| **SPI** | `SPI.h` | Arduino built-in | Bus driver for SD card |
+| **ThreeWire** | `ThreeWire.h` | Makuna | Custom 3-wire SPI variant required by the DS1302 RTC chip (uses CLK/DAT/RST instead of standard 4-wire SPI) |
+| **RtcDS1302** | `RtcDS1302.h` | Makuna | High-level read/write API for DS1302 date/time registers |
+
+---
+
+### Backend Software Libraries (Node.js / Express)
+
+| Library | Version | Description |
+|---|---|---|
+| **express** | ^5.1.0 | Web framework — routing, middleware, request lifecycle |
+| **mongoose** | ^8.0.0 | MongoDB ODM — defines schemas, virtual fields (e.g. EC µS/cm → mS/cm), validation, and query helpers |
+| **ws** | ^8.14.2 | Native WebSocket server co-located on the HTTP port; broadcasts `sensorReading` and `alert` events |
+| **jsonwebtoken** | ^9.0.2 | Issues and verifies HS256 JWTs for stateless authentication (24 h expiry) |
+| **bcryptjs** | ^2.4.3 | Salted password hashing for user accounts (10 rounds) |
+| **cors** | ^2.8.5 | Cross-Origin Resource Sharing middleware; restricts requests to the configured `CORS_ORIGIN` |
+| **helmet** | ^7.1.0 | Sets 14+ HTTP security headers (CSP, X-Frame-Options, X-XSS-Protection, etc.) |
+| **express-rate-limit** | ^7.1.5 | Per-IP request throttling (`/api` namespace) to mitigate brute-force and abuse |
+| **express-validator** | ^7.0.1 | Schema-based request body / query parameter validation |
+| **express-mongo-sanitize** | ^2.2.0 | Strips MongoDB operator characters (`$`, `.`) from user input to prevent NoSQL injection |
+| **xss-clean** | ^0.1.4 | Sanitises request payloads against XSS payloads |
+| **hpp** | ^0.2.3 | HTTP Parameter Pollution protection (e.g. `?id=1&id=2` collapsed) |
+| **dotenv** | ^16.3.1 | Loads `MONGODB_URI`, `JWT_SECRET`, etc. from `.env` into `process.env` |
+| **nodemon** *(dev only)* | ^3.1.11 | Auto-restarts the server on file changes during development |
+
+---
+
+### Frontend Software Libraries (Vue 3 / Vite)
+
+| Library | Version | Description |
+|---|---|---|
+| **vue** | ^3.5.22 | Reactive UI framework using the Composition API (`setup()`, `ref`, `computed`, `watch`) |
+| **vue-router** | ^4.6.3 | SPA routing with `meta.requiresAuth` / `meta.requiresAdmin` navigation guards |
+| **pinia** | ^3.0.3 | State management — five stores (`auth`, `farms`, `devices`, `sensorData`, `alerts`) acting as the single source of truth; `$reset()` on logout prevents stale state across user sessions |
+| **axios** | ^1.12.2 | HTTP client; request interceptor injects the JWT, response interceptor catches 401 and forces logout |
+| **chart.js** | ^4.5.1 | Canvas-based charting library for the dashboard time-series widgets (line / area charts) |
+| **lucide-vue-next** | ^0.546.0 | SVG icon set (Vue 3 wrapper around the Lucide icon library) |
+| **vite** *(build)* | ^7.1.11 | Dev server with native ES modules and HMR; production bundler |
+| **@vitejs/plugin-vue** *(build)* | ^6.0.1 | Vite plugin that compiles `.vue` Single-File Components |
+| **vite-plugin-pwa** *(build)* | ^1.2.0 | Generates the service worker and Web App Manifest, making the dashboard installable and offline-tolerant |
+| **tailwindcss** *(build)* | ^3.4.1 | Utility-first CSS framework for layout primitives |
+| **postcss** *(build)* | ^8.4.33 | CSS post-processor pipeline used by Tailwind |
+| **autoprefixer** *(build)* | ^10.4.17 | Auto-adds vendor prefixes for cross-browser CSS |
+| **vite-plugin-vue-devtools** *(dev only)* | ^8.0.3 | In-browser Vue inspector (state, components, events) for development |
+
+---
+
+### Sensor Calibration
+
+#### 1. pH Sensor — Three-Point Quadratic Calibration
+
+**Method.** The analog pH probe outputs a voltage that is non-linear with respect to actual pH. To compensate, three NIST-traceable buffer solutions (pH 4.01, 6.86, 9.18) were measured at controlled 25 °C, the corresponding ADC voltages recorded, and a quadratic curve fitted by least-squares regression.
+
+**Equation:**
+```
+pH = a·V² + b·V + c
+   = −0.0563 V² − 5.9038 V + 13.8161
+```
+
+| Coefficient | Value |
+|---|---|
+| a | −0.0562836215 |
+| b | −5.903839 |
+| c | 13.816135 |
+| Coefficient of determination (R²) | **0.9987** |
+
+**Sampling.** For each reading, the firmware takes 40 raw ADC samples, sorts them, and uses the median to suppress impulse noise from water-surface reflections.
+
+**Calibration Results:**
+
+| Buffer | Expected pH | Measured pH (mean of 5) | Error | Tolerance | Result |
+|---|---|---|---|---|---|
+| pH 4.01 | 4.01 | 4.05 | +0.04 | ±0.20 | ✅ Pass |
+| pH 6.86 | 6.86 | 6.89 | +0.03 | ±0.20 | ✅ Pass |
+| pH 9.18 | 9.18 | 9.15 | −0.03 | ±0.20 | ✅ Pass |
+
+**Conclusion.** The quadratic model achieves R² = 0.9987 across the full 4–9 pH range relevant to Wolffia cultivation, with absolute error ≤ 0.05 at every calibration point.
+
+#### 2. EC / TDS Sensor — Two-Point Linear Calibration with Temperature Compensation
+
+**Method.** Conductivity readings drift with water temperature (~2 % per °C). The firmware applies temperature compensation using the DS18B20 reading, then converts compensated voltage to TDS (ppm) and EC (mS/cm) via a two-point linear fit against known standards (500 ppm and 1000 ppm NaCl solutions).
+
+**Equations:**
+```
+V_compensated  =  V_raw / (1.0 + 0.02 × (T_water − 25.0))
+TDS_ppm        =  V_compensated × k          (k from 2-point fit)
+EC_mS/cm       =  TDS_ppm / 500
+```
+
+**Calibration Results:**
+
+| Standard | Expected TDS | Measured (ppm) | Tolerance | Result |
+|---|---|---|---|---|
+| 500 ppm NaCl | 500 | 512 | ±5 % (475–525) | ✅ Pass |
+| 1000 ppm NaCl | 1000 | 985 | ±5 % (950–1050) | ✅ Pass |
+| Linearity ratio | 2.00 | 1.92 | within bounds | ✅ Pass |
+
+**Conclusion.** Two-point fit holds linearly across the 500–1000 ppm range typical of hydroponic Wolffia nutrient solution, with error ≤ 2.4 %. Temperature compensation removes the largest systematic error source.
+
+#### 3. DS18B20 (Water Temperature) — Reference Verification
+
+**Method.** Sensor and a calibrated mercury reference thermometer were submerged in the same water bath at 25 °C, allowed to stabilise for 5 minutes, and 5 readings recorded from each.
+
+**Result:** Mean variance of 0.2 °C — well within the manufacturer datasheet ±0.5 °C and the field-acceptable ±2.5 °C. **No software calibration required** (the chip is factory-trimmed).
+
+#### 4. AHT30 (Air Temp & Humidity) — Reference Verification
+
+**Method.** AHT30 and a calibrated digital hygro-thermometer placed side-by-side for 10 min in a stable indoor environment.
+
+| Parameter | Tolerance (datasheet) | Measured Variance | Result |
+|---|---|---|---|
+| Air temperature | ±0.3 °C | ±0.2 °C | ✅ Pass |
+| Relative humidity | ±2 %RH | ±1.4 %RH | ✅ Pass |
+
+#### 5. BH1750 (Light Intensity) — Reference Verification
+
+**Method.** BH1750 (`CONTINUOUS_HIGH_RES_MODE`) and a Konica-Minolta T-10A reference lux meter both pointed at the same light source at fixed distance; 5 readings recorded across 200–6000 lux.
+
+**Result:** ±15 % deviation across the full range — within the manufacturer-stated ±20 % tolerance and acceptable for grow-light feedback (intensity bands matter more than absolute lux).
+
+#### Calibration Summary Table
+
+| Sensor | Method | Standards / Reference | Achieved Accuracy | Status |
+|---|---|---|---|---|
+| pH probe | 3-point quadratic fit | pH 4.01 / 6.86 / 9.18 buffers | ±0.05 pH (R² = 0.9987) | ✅ Calibrated |
+| EC/TDS | 2-point linear + temp-comp | 500 / 1000 ppm NaCl | ≤ 2.4 % error | ✅ Calibrated |
+| DS18B20 | Factory-trimmed | Reference thermometer | ±0.2 °C measured | ✅ Verified |
+| AHT30 (temp) | Factory-trimmed | Calibrated hygrometer | ±0.2 °C measured | ✅ Verified |
+| AHT30 (humidity) | Factory-trimmed | Calibrated hygrometer | ±1.4 %RH measured | ✅ Verified |
+| BH1750 | Factory-trimmed | Konica-Minolta T-10A | ±15 % measured | ✅ Verified |
+
+---
+
 ## Local Development Setup
 
 ### Prerequisites

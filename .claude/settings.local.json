@@ -14,7 +14,21 @@
       "Bash(curl -s -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2OTc2ZTJmNjllODRhNDAzMzA4YWU2NGMiLCJlbWFpbCI6ImZpcnN0QGZhcm0uY29tIiwicm9sZSI6ImZhcm1lciIsImlhdCI6MTc3NzAwNjI5MywiZXhwIjoxNzc3MDkyNjkzfQ.FCJ3No42gMxEYprvpo9XIDMyfJ6_KTsMxjKYqKlgtfQ' 'http://localhost:3000/api/alerts?status=active&limit=50')",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
+<<<<<<< Updated upstream
       "Bash(git push *)"
+=======
+      "Bash(git push *)",
+      "Bash(npm install *)",
+      "Read(//c/Users/niwat maneewong/OneDrive/Desktop/First/Senior/**)",
+      "Read(//c/Users/niwat maneewong/OneDrive/Desktop/First/Senior/wolffia_backend/**)",
+      "Bash(pnpm install *)",
+      "Bash(git rm *)",
+      "Bash(git -C \"/c/Users/niwat maneewong/OneDrive/Desktop/First/Senior/woffia_iot_tracking\" add wolffia_frontend/pnpm-lock.yaml)",
+      "Bash(git -C \"/c/Users/niwat maneewong/OneDrive/Desktop/First/Senior/woffia_iot_tracking\" status)",
+      "Bash(git -C '/c/Users/niwat maneewong/OneDrive/Desktop/First/Senior/woffia_iot_tracking' commit -m ' *)",
+      "Bash(git -C \"/c/Users/niwat maneewong/OneDrive/Desktop/First/Senior/woffia_iot_tracking\" push)",
+      "Bash(pnpm run *)"
+>>>>>>> Stashed changes
     ]
   }
 }
