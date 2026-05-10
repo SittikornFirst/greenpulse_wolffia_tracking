@@ -1,7 +1,11 @@
 // Threshold configuration for sensor values
 // These match the DeviceConfiguration model in the backend
 
-export const THRESHOLDS = {
+import { reactive } from "vue";
+
+// Reactive so mutations via updateThresholdsFromConfig trigger Vue computeds
+// that read THRESHOLDS.x.min/max (e.g. chart optimal-range bindings).
+export const THRESHOLDS = reactive({
   ph_value: {
     min: 6.0,
     max: 7.5,
@@ -40,11 +44,11 @@ export const THRESHOLDS = {
   },
   light_intensity: {
     min: 3500,
-    max: 6000,
+    max: 10000,
     unit: "lux",
     label: "Light",
   },
-};
+});
 
 // Get status color based on value and thresholds
 export function getValueStatus(key, value) {

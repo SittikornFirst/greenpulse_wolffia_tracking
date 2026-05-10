@@ -140,7 +140,7 @@ const seed = async () => {
       const config = await DeviceConfiguration.create({
         device_id: device._id,
         alert_enabled: true,
-        sampling_interval: 300,
+        sampling_interval: 60,
         ph_min: 6.0,
         ph_max: 7.5,
         ec_value_min: 1.0,

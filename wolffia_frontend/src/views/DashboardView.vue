@@ -254,6 +254,16 @@
 
         <div class="charts-grid">
           <ChartCard
+            title="Air Temperature"
+            :data="airTemperatureData"
+            chart-type="line"
+            :color="chartColors.airTemperature"
+            :optimal-range="chartRanges.airTemperature"
+            :loading="loading || chartLoading.airTemperature"
+            @range-change="(r) => handleChartRangeChange('airTemperature', r)"
+          />
+
+          <ChartCard
             title="Light Intensity"
             :data="lightData"
             chart-type="area"
@@ -373,16 +383,18 @@ export default {
     const chartTimeRanges = ref({
       ph: "1h",
       temperature: "1h",
+      airTemperature: "1h",
       light: "1h",
       ec: "1h",
       tds: "1h",
       humidity: "1h",
     });
     // Per-chart loading state — flips during a range switch fetch so we don't
-    // spin all six charts when only one is being refetched.
+    // spin all charts when only one is being refetched.
     const chartLoading = ref({
       ph: false,
       temperature: false,
+      airTemperature: false,
       light: false,
       ec: false,
       tds: false,
@@ -508,6 +520,7 @@ export default {
     const chartColors = {
       ph: "#3b82f6", // Blue
       temperature: "#ef4444", // Red
+      airTemperature: "#f97316", // Orange
       light: "#f59e0b", // Amber
       ec: "#10b981", // Green
       tds: "#8b5cf6", // Purple
@@ -520,6 +533,10 @@ export default {
       temperature: {
         min: THRESHOLDS.water_temperature_c.min,
         max: THRESHOLDS.water_temperature_c.max,
+      },
+      airTemperature: {
+        min: THRESHOLDS.air_temperature_c.min,
+        max: THRESHOLDS.air_temperature_c.max,
       },
       light: {
         min: THRESHOLDS.light_intensity.min,
@@ -670,6 +687,12 @@ export default {
         .map((r) => ({ x: r.timestamp, y: r.temperature_water_c.value })),
     );
 
+    const airTemperatureData = computed(() =>
+      getHistoricalByRange("airTemperature")
+        .filter((r) => r?.temperature_air_c?.value !== undefined)
+        .map((r) => ({ x: r.timestamp, y: r.temperature_air_c.value })),
+    );
+
     const lightData = computed(() =>
       getHistoricalByRange("light")
         .filter((r) => r?.light_intensity?.value !== undefined)
@@ -737,6 +760,7 @@ export default {
         const metricKeys = [
           "ph",
           "temperature",
+          "airTemperature",
           "light",
           "ec",
           "tds",
@@ -915,6 +939,7 @@ export default {
       metrics,
       phData,
       temperatureData,
+      airTemperatureData,
       lightData,
       ecData,
       tdsData,

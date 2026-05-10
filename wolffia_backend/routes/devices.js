@@ -52,7 +52,7 @@ router.get("/:deviceId/config", async (req, res) => {
     res.json({
       success: true,
       device_id: device.device_id,
-      sampling_interval: config.sampling_interval ?? 30,
+      sampling_interval: config.sampling_interval ?? 60,
       alert_enabled: config.alert_enabled ?? true,
       ph_min: config.ph_min ?? 6.0,
       ph_max: config.ph_max ?? 7.5,
@@ -249,7 +249,7 @@ router.post("/", async (req, res) => {
     const config = await DeviceConfiguration.create({
       device_id: device._id,
       alert_enabled: req.body.alert_enabled ?? true,
-      sampling_interval: req.body.sampling_interval || 300,
+      sampling_interval: req.body.sampling_interval || 60,
       ph_min: 6.0,
       ph_max: 7.5,
       ec_value_min: 1.0,

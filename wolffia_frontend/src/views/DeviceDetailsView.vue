@@ -463,7 +463,7 @@ export default {
         };
 
         const applyWolffiaPresets = () => {
-            thresholds.value.sampling_interval = 300;
+            thresholds.value.sampling_interval = 60;
             thresholds.value.alert_enabled = true;
             thresholds.value.ph.min = 6.0;
             thresholds.value.ph.max = 7.5;
